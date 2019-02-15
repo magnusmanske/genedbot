@@ -26,10 +26,9 @@ class GFF2WD {
 	function GFF2WD () {
 		global $qs ;
 		$this->tfc = new ToolforgeCommon ( 'genedb' ) ;
-		$this->qs = $this->tfc->getQS ( 'genedb' , __DIR__. '/../bot.ini' , true ) ;
+		$this->qs = $this->tfc->getQS ( 'genedb' , __DIR__. '/bot.ini' , true ) ;
 		$qs = $this->qs ;
 		$this->wil = new WikidataItemList () ;
-		$this->dbw = $this->tfc->openDB ( 'wikidata' , 'wikidata' ) ;
 	}
 
 	function init ( $genedb_id = '' ) {
@@ -41,7 +40,7 @@ class GFF2WD {
 
 	function computeFilenameGFF () { # TODO use FTP directly
 		if ( $this->use_local_data_files ) {
-			$gff_filename = '/data/project/genedb/data/gff/'.$this->gffj->file_root.'.gff3.gz' ;
+			$gff_filename = __DIR__ . '/data/gff/'.$this->gffj->file_root.'.gff3.gz' ;
 			if ( !file_exists($gff_filename) ) die ( "No GFF file: {$gff_filename}\n") ;
 			return $gff_filename ;
 		} else {
@@ -52,7 +51,7 @@ class GFF2WD {
 	function computeFilenameGAF () { # TODO use FTP directly
 		if ( $this->use_local_data_files ) {
 			$ftp_root = 'ftp.sanger.ac.uk/pub/genedb/releases/latest/' ;
-			$gaf_filename = '/data/project/genedb/data/gaf/'.$ftp_root.'/'.$this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
+			$gaf_filename = __DIR__ . '/data/gaf/'.$ftp_root.'/'.$this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
 			if ( !file_exists($gaf_filename) ) die ( "No GAF file: {$gaf_filename}\n") ;
 			return $gaf_filename ;
 		} else {
@@ -131,11 +130,6 @@ class GFF2WD {
 
 	function isRealItem ( $q ) { # Returns false if it's a redirect
 	return true ; # SHORTCUTTING
-		$q = $this->dbw->real_escape_string ( $q ) ;
-		$sql = "SELECT * FROM page WHERE page_namespace=0 AND page_is_redirect=0 AND page_title='{$q}'" ;
-		$result = $this->tfc->getSQL ( $this->dbw , $sql ) ;
-		if($row = $result->fetch_assoc()) return true ;
-		return false ;
 	}
 
 	function loadGAF () {
@@ -274,7 +268,15 @@ class GFF2WD {
 			'labels' => [ 'ignore_except'=>['en'] ] ,
 			'descriptions' => [ 'ignore_except'=>['en'] ] ,
 			'aliases' => [ 'ignore_except'=>['en'] ] ,
-			'remove_only' => ['P680','P681','P682','P1057']
+			'remove_only' => [
+				'P680', // Molecular function
+				'P681', // Cell component
+				'P682', // Biological process
+				'P1057', // Chromosome
+				'P2548', // Strand orientation
+				'P644', // Genomic start
+				'P645' // Genomic end
+			]
 		] ;
 		$diff = $gene_i->diffToItem ( $item_to_diff , $options ) ;
 

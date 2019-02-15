@@ -1,0 +1,20 @@
+{
+	"site" : "wikidata" ,
+	"bot_config_file" : "" ,
+	"logfile" : "" ,
+	"sites" : {
+		"wikidata" : {
+			"label" : "Wikidata",
+			"oauth" : { "language":"wikidata" , "project":"wikidata" , "ini_file":"/data/project/quickstatements/oauth.ini" , "mwOAuthUrl":"https://www.mediawiki.org/w/index.php?title=Special:OAuth" , "mwOAuthIW":"mw" } ,
+			"server" : "www.wikidata.org" ,
+			"api" : "https://www.wikidata.org/w/api.php" ,
+			"pageBase" : "https://www.wikidata.org/wiki/" ,
+			"toolBase" : "https://tools.wmflabs.org/quickstatements" ,
+			"types" : {
+				"P" : { "type":"property" , "ns":120 , "ns_prefix":"Property:" } ,
+				"Q" : { "type":"item" , "ns":0 , "ns_prefix":"" } ,
+				"L" : { "type":"lexeme" , "ns":146 , "ns_prefix":"Lexeme:" }
+			}
+		}
+	}
+}

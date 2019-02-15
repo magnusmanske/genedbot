@@ -1,10 +1,12 @@
 #!/usr/bin/php
 <?php
 
-require_once ( '/data/project/genedb/public_html/php/wikidata.php' ) ;
-require_once ( '/data/project/genedb/public_html/php/ToolforgeCommon.php' ) ;
+# THIS WILL ONLY WORK ON TOOLFORGE
 
-$config_file = '/data/project/genedb/scripts/notification.json' ;
+require_once ( __DIR__ . '/external/wikidata.php' ) ;
+require_once ( __DIR__ . '/external/ToolforgeCommon.php' ) ;
+
+$config_file = __DIR__ . '/notification.json' ;
 
 
 function send_mail ( $to , $subject , $message ) {
@@ -23,8 +25,10 @@ function send_mail ( $to , $subject , $message ) {
 	}
 }
 
-$config = json_decode ( file_get_contents ( $config_file) ) ;
+if ( !file_exists($config_file) ) $config = (object) [ 'last_ts' => '' ] ;
+else $config = json_decode ( file_get_contents ( $config_file) ) ;
 $today = date("Ymd") ;
+print "$today / {$config->last_ts}\n" ;
 if ( $today == $config->last_ts ) exit(0); # No news from the Western Front
 
 $tfc = new ToolforgeCommon('notify on changes');

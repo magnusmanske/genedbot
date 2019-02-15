@@ -67,7 +67,9 @@ class QuickStatements {
 	
 	public function __construct () {
 		global $wikidata_api_url ;
-		$this->config = json_decode ( file_get_contents ( __DIR__ . '/config.json' ) ) ;
+		$this->config = json_decode ( file_get_contents ( __DIR__ . '/qs_config.json' ) ) ;
+		$this->config->bot_config_file = __DIR__ . '/../bot.ini' ;
+		$this->config->logfile = __DIR__ . '/../qs.log' ;
 		$wikidata_api_url = $this->getSite()->api ;
 		$this->wd = new WikidataItemList () ;
 	}
