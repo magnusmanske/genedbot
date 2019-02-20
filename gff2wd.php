@@ -22,13 +22,15 @@ class GFF2WD {
 	var $aspects = [ 'P' => 'P682' , 'F' => 'P680' , 'C' => 'P681' ] ;
 	var $evidence_codes = [] ;
 	var $sparql_result_cache = [] ;
+	var $paper_editor ;
 
-	function GFF2WD () {
+	function __construct () {
 		global $qs ;
 		$this->tfc = new ToolforgeCommon ( 'genedb' ) ;
 		$this->qs = $this->tfc->getQS ( 'genedb' , __DIR__. '/bot.ini' , true ) ;
 		$qs = $this->qs ;
 		$this->wil = new WikidataItemList () ;
+		$this->paper_editor = new PaperEditor ( $this->tfc , $this->qs , $this->wil ) ;
 	}
 
 	function init ( $genedb_id = '' ) {
@@ -38,23 +40,23 @@ class GFF2WD {
 		$this->run($genedb_id) ;
 	}
 
-	function computeFilenameGFF () { # TODO use FTP directly
+	function computeFilenameGFF () {
 		if ( $this->use_local_data_files ) {
 			$gff_filename = __DIR__ . '/data/gff/'.$this->gffj->file_root.'.gff3.gz' ;
 			if ( !file_exists($gff_filename) ) die ( "No GFF file: {$gff_filename}\n") ;
 			return $gff_filename ;
-		} else {
+		} else { # DEFAULT: FTP
 			return "ftp://ftp.sanger.ac.uk/pub/genedb/apollo_releases/latest/" . $this->gffj->file_root.'.gff3.gz' ; ;
 		}
 	}
 
-	function computeFilenameGAF () { # TODO use FTP directly
+	function computeFilenameGAF () {
 		if ( $this->use_local_data_files ) {
 			$ftp_root = 'ftp.sanger.ac.uk/pub/genedb/releases/latest/' ;
 			$gaf_filename = __DIR__ . '/data/gaf/'.$ftp_root.'/'.$this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
 			if ( !file_exists($gaf_filename) ) die ( "No GAF file: {$gaf_filename}\n") ;
 			return $gaf_filename ;
-		} else {
+		} else { # DEFAULT: FTP
 			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/" . $this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
 		}
 	}
@@ -606,7 +608,7 @@ class GFF2WD {
 		$ref_q = $this->getAndCacheItemForSPARQL ( "SELECT ?q { ?q wdt:{$prop} '{$lit_id}' }" , $prop ) ;
 		if ( isset($ref_q) ) return $ref_q ;
 #		print "TRYING TO CREATE NEW PUBLICATION FOR {$prop}:'{$lit_id}' => " ;
-		if ( $prop == 'P698' ) $ref_q = getOrCreateWorkFromIDs ( ['pmid'=>$lit_id] ) ;
+		if ( $prop == 'P698' ) $ref_q = $this->paper_editor->getOrCreateWorkFromIDs ( ['pmid'=>$lit_id] ) ;
 #		print "https://www.wikidata.org/wiki/{$ref_q}\n" ;
 		return $ref_q ;
 	}

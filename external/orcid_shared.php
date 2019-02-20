@@ -123,7 +123,7 @@ class ORCID {
 	}
 
 	function initializeNamecount ( $named ) {
-		$ret = array() ;
+		$ret = [] ;
 		foreach ( $named AS $n ) {
 			$name = $n->mainsnak->datavalue->value ;
 			if ( isset($ret[$name]) ) $ret[$name]++ ;
@@ -149,7 +149,7 @@ class ORCID {
 	function checkNameInAuthorList ( $name , &$namecount , $names ) {
 		$found = false ;
 		if ( !isset($namecount[$name]) or $namecount[$name] > 1 ) return $found ;
-		$name_variants = array () ;
+		$name_variants = [] ;
 		$this->addNamesToHash ( $name_variants , $name ) ;
 
 		foreach ( $name_variants as $nv ) {
@@ -175,11 +175,277 @@ class ORCID {
 ************************************************************************************************************************************************/
 
 
-function fixISNI ( $isni ) {
-	$isni = trim ( $isni ) ;
-	if ( preg_match ( '/^(\d{4})(\d{4})(\d{4})(....)$/' , $isni , $m ) ) $isni = $m[1].' '.$m[2].' '.$m[3].' '.$m[4] ;
-	return $isni ;
-}
+class PaperEditor {
+
+	public $action_taken = '' ;
+	public $is_bot_mode = false ;
+	public $debugging = false ;
+	public $testing = false ;
+	public $create_new_authors = false ;
+
+	var $tfc ;
+	var $wil ;
+	var $authors_with_orcid = [] ;
+
+	function __construct( $tfc , $qs , $wil ) {
+		if ( isset($tfc) ) $this->tfc = $tfc ;
+		else $this->tfc = new ToolforgeCommon ;
+		if ( isset($qs) ) $this->qs = $qs ;
+		else $this->qs = getQS() ; // Assuming global function! TODO FIXME check function exists
+		if ( isset($wil) ) $this->wil = $wil ;
+		else $this->wil = new WikidataItemList () ;
+	}
+
+	public function enforceUncachedSPARQL ( &$sparql ) {
+		$r = rand() ;
+		$sparql = explode ( '{' , $sparql , 2 ) ;
+		$sparql = $sparql[0] . " ?fakeVariable{$r} {" . $sparql[1] ;
+	}
+	public function fixISNI ( $isni ) {
+		$isni = trim ( $isni ) ;
+		if ( preg_match ( '/^(\d{4})(\d{4})(\d{4})(....)$/' , $isni , $m ) ) $isni = $m[1].' '.$m[2].' '.$m[3].' '.$m[4] ;
+		return $isni ;
+	}
+
+	// $w = [ 'doi'=>'..' , 'pmid'=>'..' , 'pmid'=>'..' ]
+	public function getOrCreateWorkFromIDs ( $w , $auto_add_authors = true ) {
+		$cond = [] ;
+		if ( isset($w['doi']) ) {
+			$cond[] = '?q wdt:P356 "' . strtoupper($w['doi']) . '"' ;
+			$cond[] = '?q wdt:P356 "' . strtolower($w['doi']) . '"' ;
+		}
+		if ( isset($w['pmid']) ) $cond[] = '?q wdt:P698 "' . $w['pmid'] . '"' ;
+		if ( isset($w['pmc']) ) $cond[] = '?q wdt:P932 "' . preg_replace('/^\D+/','',$w['pmc']) . '"' ;
+		if ( count($cond) == 0 ) return ;
+		$sparql = "SELECT DISTINCT ?q { {" . implode ( '} UNION {' , $cond ) . "} }" ;
+		$this->enforceUncachedSPARQL ( $sparql ) ;
+		
+		if($this->debugging)print "$sparql\n" ;
+		$items = $this->tfc->getSPARQLitems ( $sparql , 'q' ) ;
+		if ( count($items) > 0 ) { // An item for this work already exists
+			if ( $auto_add_authors and isset($w['doi']) ) $this->addOrCreateAutorsForPaper ( $w['doi'] , $items[0] ) ;
+			return $items[0] ;
+		}
+		$id = '' ;
+		if ( isset($w['doi']) ) $id = $w['doi'] ;
+		else if ( isset($w['pmc']) ) $id = $w['pmc'] ;
+		else if ( isset($w['pmid']) ) $id = $w['pmid'] ;
+		else return ;
+
+		if($this->debugging)print "CREATING NEW WORK FOR {$id}\n" ;
+		$smd = new SourceMD ( $id ) ;
+		if ( $this->is_bot_mode ) $smd->verbose = false ;
+		$commands = $smd->generateQuickStatements() ;
+		if ( count($commands) < 5 ) return ; # Paranoia
+		$commands = implode ( "\n" , $commands ) ;
+		$this->qs->use_command_compression = true ;
+		
+		if($this->debugging)print_r ( $commands ) ;
+		$tmp = $this->qs->importData ( $commands , 'v1' ) ;
+		$this->qs->runCommandArray ( $tmp['data']['commands'] ) ;
+		$q = $this->qs->last_item ;
+		
+		if($this->debugging)print "\n=> https://www.wikidata.org/wiki/{$q}\n" ;
+		if ( $q == 'LAST' ) return ;
+		$this->action_taken = 'CREATE' ;
+		if ( $auto_add_authors && isset($w['doi']) ) $this->addOrCreateAutorsForPaper ( $w['doi'] , $q ) ;
+		return $q ;
+	}
+
+	public function addOrCreateAutorsForPaper ( $doi , $paper_q = '' ) {
+		$oc = new ORCID ;
+		
+		$ret = [] ;
+		$doi = trim ( $doi ) ;
+		
+		// Get information from Wikidata
+		$paper_q = $this->getItemForDOI ( $doi , $paper_q ) ;
+		if ( !isset($paper_q) ) return $ret ; // DOI not on Wikidata
+
+		$this->wil->loadItem ( $paper_q ) ;
+		$paper_i = $this->wil->getItem ( $paper_q ) ;
+		if ( !isset($paper_i) ) return $ret ; // Item not on Wikidata
+		$author_claims = $paper_i->getClaims ( 'P50' ) ;
+		$author_qs = [] ;
+		foreach ( $author_claims AS $c ) $author_qs[] = $paper_i->getTarget ( $c ) ;
+		$this->wil->loadItems ( $author_qs ) ;
+
+		// Get information from ORCID
+		$search_results = $oc->searchORCID ( '"'.$doi.'"' ) ;
+		if ( !isset($search_results) or $search_results === null or !isset($search_results->result) ) {
+			print "ORCID API failure for {$doi}\n" ;
+			return $ret ;
+		}
+
+		$had_orcid = [] ;
+		foreach ( $search_results->result AS $result ) {
+			if ( !isset($result->{'orcid-identifier'}) ) continue ;
+			if ( !isset($result->{'orcid-identifier'}->path) ) continue ;
+			$orcid = $result->{'orcid-identifier'}->path ;
+			if ( isset($had_orcid[$orcid]) ) continue ;
+			$had_orcid[$orcid] = 1 ;
+			if ( !$oc->isValidORCID($orcid) ) continue ; // Bad ORCID ID
+
+			$person = $oc->getPersonInfoORCID ( $orcid ) ;
+			if ( !isset($person) or $person === null ) continue ;
+			$names = $oc->parsePersonAliasesORCID ( $person ) ;
+			$new_candidates = [] ;
+
+			// Name only
+			$named = $paper_i->getClaims ( 'P2093' ) ;
+			$namecount = $oc->initializeNamecount ( $named ) ;
+
+			foreach ( $named AS $n ) {
+				$name = $n->mainsnak->datavalue->value ;
+				$found = $oc->checkNameInAuthorList ( $name , $namecount , $names ) ;
+				if ( !$found ) { // Not in named authors
+	#				print "Not found on ORICD author list: [$orcid] $name\n" ;
+					continue ;
+				}
+
+				$num = $this->getNumberQualifier ( $n ) ;
+				$author_q = $this->getOrCreateAuthorItem ( $name , $orcid , $person ) ;
+				if ( !isset($author_q) or $author_q == '' ) continue ; // Paranoia
+
+				// Remove string author, add P50 author
+				$commands = '' ;
+				$commands .= "-$paper_q\tP2093\t\"$name\"\n" ; # Re-activated with "stated as" (after https://www.wikidata.org/wiki/Wikidata_talk:WikiProject_Source_MetaData#Author_names )
+				$commands .= "$paper_q\tP50\t$author_q" ;
+				$commands .= "\tP1932\t\"$name\"" ; # Adding name as "stated as"
+				if ( $num != '' ) $commands .= "\tP1545\t\"$num\"" ;
+				$commands .= "\n" ;
+
+				if ( $testing ) {
+					print "---\n$commands\n" ;
+					break ;
+				}
+
+				$this->qs->use_command_compression = true ;
+				$tmp = $this->qs->importData ( $commands , 'v1' ) ;
+				$this->qs->runCommandArray ( $tmp['data']['commands'] ) ;
+				$action_taken = 'EDIT' ;
+
+				break ; // Already found it
+			}
+
+
+			// Existing items
+			$candidates = [] ;
+			foreach ( $author_qs AS $q ) {
+				$i = $this->wil->getItem($q) ;
+				if ( !isset($i) ) continue ;
+				foreach ( $names AS $n ) {
+					if ( !$i->hasLabel($n) ) continue ;
+					$candidates[$i->getQ()] = $orcid ;
+				}
+			}
+			
+			if ( count($candidates) == 0 ) {
+				// No joy
+				continue ;
+			}
+			if ( count($candidates) > 1 ) {
+	//			logit ( "Multiple candidates for $orcid" ) ;
+				continue ;
+			}
+			
+			foreach ( $candidates AS $k => $v ) $ret[$k] = $v ;
+
+		}
+		return $ret ;
+	}
+
+	function getItemForDOI ( $doi , $paper_q = '' ) {
+		if ( isset($paper_q) and preg_match ( '/^Q\d+$/' , $paper_q ) ) return $paper_q ;
+		$sparql = 'SELECT DISTINCT ?q { VALUES ?dois { "'.strtoupper($doi).'" "'.strtolower($doi).'" } . ?q wdt:P356 ?dois }' ;
+		$this->enforceUncachedSPARQL ( $sparql ) ;
+		$items = $this->tfc->getSPARQLitems ( $sparql ) ;
+		if ( count($items) != 1 ) return ;
+		$paper_q = $items[0] ;
+		return $paper_q ;
+	}
+
+	function getNumberQualifier ( $n ) {
+		$num = '' ;
+		if ( isset($n->qualifiers) ) {
+			$num = $n->qualifiers ;
+			if ( !isset($num) || !isset($num->P1545) ) {}
+			else $num = $num->P1545[0]->datavalue->value ;
+		}
+		return $num ;
+	}
+
+	function getOrCreateAuthorItem ( $name , $orcid , $person ) {
+		if ( isset($person->{'person'}) ) $person = $person->{'person'} ;
+
+		// Try internal cache
+		if ( $orcid != '' and isset($this->authors_with_orcid[$orcid]) ) return $this->authors_with_orcid[$orcid] ;
+
+		// Try 
+		if ( $orcid != '' ) {
+			$sparql = "SELECT ?q { ?q wdt:P496 '{$orcid}' }" ;
+			$items = $this->tfc->getSPARQLitems ( $sparql , 'q' ) ;
+			if ( count($items) > 0 ) {
+				$this->authors_with_orcid[$orcid] = $items[0] ;
+				return $items[0] ;
+			}
+	 	}
+
+		if ( !$this->create_new_authors ) return ;
+
+		// Create new item
+		$commands = '' ;
+		$commands .= "CREATE\n" ;
+		$commands .= "LAST\tLen\t\"$name\"\n" ;
+		$commands .= "LAST\tP496\t\"$orcid\"\n" ;
+		$commands .= "LAST\tP31\tQ5\n" ;
+		if ( isset($person->{'researcher-urls'}) and isset($person->{'researcher-urls'}->{'researcher-url'}) ) {
+			$found_url = false ;
+			$fallback_command = '' ;
+			foreach ( $person->{'researcher-urls'}->{'researcher-url'} AS $x ) {
+				if ( !isset($x) or !isset($x->{'url-name'})  or !isset($x->url) or !isset($x->url->value) ) continue ;
+				$url = $x->url->value ;
+				$cmd = "LAST\tP856\t\"$url\"\n" ;
+				if ( $fallback_command == '' ) $fallback_command = $cmd ;
+				if ( !isset($x) ) continue ;
+				if ( !isset($x->{'url-name'}) ) continue ;
+				if ( !is_object($x->{'url-name'}) ) continue ;
+				$key = strtolower(preg_replace('/\s+/','',$x->{'url-name'}->value)) ;
+				if ( $key != 'homepage' and $key != 'personalhomepage' and $key != 'personalwebsite' ) continue ;
+				$commands .= $cmd ;
+				$found_url = true ;
+				break ;
+			}
+		}
+		if ( isset($person->{'external-identifiers'}) and isset($person->{'external-identifiers'}->{'external-identifier'}) ) {
+			foreach ( $person->{'external-identifiers'}->{'external-identifier'} AS $x ) {
+				$v = $x->{"external-id-value"} ;
+				if ( $x->{'external-id-type'} == 'Scopus Author ID' ) {
+					$commands .= "LAST\tP1153\t\"{$v}\"\n" ;
+				}
+			}
+		}
+		
+		if ( $testing ) {
+			print_r ( $commands ) ;
+			return 'SOME_NEW_Q' ;
+		}
+
+		// Create new author, or use existing one
+		$this->qs->use_command_compression = true ;
+		$tmp = $this->qs->importData ( $commands , 'v1' ) ;
+		$tmp['data']['commands'] = $this->qs->compressCommands ( $tmp['data']['commands'] ) ;
+		$this->qs->runCommandArray ( $tmp['data']['commands'] ) ;
+		$author_q = $this->qs->last_item ;
+		if ( !isset($author_q) or $author_q == '' ) return ; // A problem
+		$this->authors_with_orcid[$orcid] = $author_q ;
+		return $author_q ;
+	}
+
+	// SEE https://pub.sandbox.orcid.org/v2.0/#!/Public_API_v2.0/viewRecord
+
+} ;
+/*
 
 function getBookTitleFromISBN ( $isbn ) {
 	$url = "https://openlibrary.org/api/books?bibkeys=ISBN:{$isbn}&callback=mycallback" ;
@@ -255,7 +521,7 @@ function add_person_ids_from_orcid ( $q ) {
 	$h = file_get_contents ( "https://orcid.org/$orcid" ) ;
 	$h = preg_replace ( '/\s+/' , ' ' , $h ) ;
 	
-	$candidates = array() ;
+	$candidates = [] ;
 	
 	if ( preg_match ( '/<div class="bio-content">(.+?)<\/div>/' , $h , $m ) ) {
 		$bio = $m[0] ;
@@ -397,212 +663,12 @@ function add_person_ids_from_orcid ( $q ) {
 //________________________________________________________________________________________________________________________________________________________________
 
 
-if ( !isset($authors_with_orcid) ) $authors_with_orcid = [] ;
-
-
-function getItemForDOI ( $doi , $paper_q = '' ) {
-	if ( isset($paper_q) and preg_match ( '/^Q\d+$/' , $paper_q ) ) return $paper_q ;
-	$sparql = 'SELECT DISTINCT ?q { VALUES ?dois { "'.strtoupper($doi).'" "'.strtolower($doi).'" } . ?q wdt:P356 ?dois }' ;
-	enforceUncachedSPARQL ( $sparql ) ;
-	$items = getSPARQLitems ( $sparql ) ;
-	if ( count($items) != 1 ) return ;
-	$paper_q = 'Q'.$items[0] ;
-	return $paper_q ;
-}
-
-function getNumberQualifier ( $n ) {
-	$num = '' ;
-	if ( isset($n->qualifiers) ) {
-		$num = $n->qualifiers ;
-		if ( !isset($num) || !isset($num->P1545) ) {}
-		else $num = $num->P1545[0]->datavalue->value ;
-	}
-	return $num ;
-}
-
-function getOrCreateAuthorItem ( $name , $orcid , $person ) {
-	global $authors_with_orcid , $create_new_authors , $testing , $tfc ;
-	if ( isset($person->{'person'}) ) $person = $person->{'person'} ;
-
-	// Try internal cache
-	if ( $orcid != '' and isset($authors_with_orcid[$orcid]) ) return $authors_with_orcid[$orcid] ;
-
-	// Try 
-	if ( $orcid != '' ) {
-		if ( !isset($tfc) ) $tfc = new ToolforgeCommon ;
-		$sparql = "SELECT ?q { ?q wdt:P496 '{$orcid}' }" ;
-		$items = $tfc->getSPARQLitems ( $sparql , 'q' ) ;
-		if ( count($items) > 0 ) {
-			$authors_with_orcid[$orcid] = $items[0] ;
-			return $items[0] ;
-		}
- 	}
-
-	if ( !$create_new_authors ) return ;
-
-	// Create new item
-	$commands = '' ;
-	$commands .= "CREATE\n" ;
-	$commands .= "LAST\tLen\t\"$name\"\n" ;
-	$commands .= "LAST\tP496\t\"$orcid\"\n" ;
-	$commands .= "LAST\tP31\tQ5\n" ;
-	if ( isset($person->{'researcher-urls'}) and isset($person->{'researcher-urls'}->{'researcher-url'}) ) {
-		$found_url = false ;
-		$fallback_command = '' ;
-		foreach ( $person->{'researcher-urls'}->{'researcher-url'} AS $x ) {
-			if ( !isset($x) or !isset($x->{'url-name'})  or !isset($x->url) or !isset($x->url->value) ) continue ;
-			$url = $x->url->value ;
-			$cmd = "LAST\tP856\t\"$url\"\n" ;
-			if ( $fallback_command == '' ) $fallback_command = $cmd ;
-			if ( !isset($x) ) continue ;
-			if ( !isset($x->{'url-name'}) ) continue ;
-			if ( !is_object($x->{'url-name'}) ) continue ;
-			$key = strtolower(preg_replace('/\s+/','',$x->{'url-name'}->value)) ;
-			if ( $key != 'homepage' and $key != 'personalhomepage' and $key != 'personalwebsite' ) continue ;
-			$commands .= $cmd ;
-			$found_url = true ;
-			break ;
-		}
-	}
-	if ( isset($person->{'external-identifiers'}) and isset($person->{'external-identifiers'}->{'external-identifier'}) ) {
-		foreach ( $person->{'external-identifiers'}->{'external-identifier'} AS $x ) {
-			$v = $x->{"external-id-value"} ;
-			if ( $x->{'external-id-type'} == 'Scopus Author ID' ) {
-				$commands .= "LAST\tP1153\t\"{$v}\"\n" ;
-			}
-		}
-	}
-	
-	if ( $testing ) {
-		print_r ( $commands ) ;
-		return 'SOME_NEW_Q' ;
-	}
-
-	// Create new author, or use existing one
-	$qs = getQS() ;
-	$qs->use_command_compression = true ;
-	$tmp = $qs->importData ( $commands , 'v1' ) ;
-	$tmp['data']['commands'] = $qs->compressCommands ( $tmp['data']['commands'] ) ;
-	$qs->runCommandArray ( $tmp['data']['commands'] ) ;
-	$author_q = $qs->last_item ;
-	if ( !isset($author_q) or $author_q == '' ) return ; // A problem
-	$authors_with_orcid[$orcid] = $author_q ;
-	return $author_q ;
-}
-
-// SEE https://pub.sandbox.orcid.org/v2.0/#!/Public_API_v2.0/viewRecord
-
-function addOrCreateAutorsForPaper ( $doi , $paper_q = '' ) {
-	global $wil , $testing , $action_taken ;
-	if ( !isset($wil) ) $wil = new WikidataItemList () ;
-	$oc = new ORCID ;
-	
-	$ret = array() ;
-	$doi = trim ( $doi ) ;
-	
-	// Get information from Wikidata
-	$paper_q = getItemForDOI ( $doi , $paper_q ) ;
-	if ( !isset($paper_q) ) return $ret ; // DOI not on Wikidata
-
-	$wil->loadItem ( $paper_q ) ;
-	$paper_i = $wil->getItem ( $paper_q ) ;
-	if ( !isset($paper_i) ) return $ret ; // Item not on Wikidata
-	$author_claims = $paper_i->getClaims ( 'P50' ) ;
-	$author_qs = array() ;
-	foreach ( $author_claims AS $c ) $author_qs[] = $paper_i->getTarget ( $c ) ;
-	$wil->loadItems ( $author_qs ) ;
-
-	// Get information from ORCID
-	$search_results = $oc->searchORCID ( '"'.$doi.'"' ) ;
-	if ( !isset($search_results) or $search_results === null or !isset($search_results->result) ) {
-		print "ORCID API failure for {$doi}\n" ;
-		return $ret ;
-	}
-
-	$had_orcid = [] ;
-	foreach ( $search_results->result AS $result ) {
-		if ( !isset($result->{'orcid-identifier'}) ) continue ;
-		if ( !isset($result->{'orcid-identifier'}->path) ) continue ;
-		$orcid = $result->{'orcid-identifier'}->path ;
-		if ( isset($had_orcid[$orcid]) ) continue ;
-		$had_orcid[$orcid] = 1 ;
-		if ( !$oc->isValidORCID($orcid) ) continue ; // Bad ORCID ID
-
-		$person = $oc->getPersonInfoORCID ( $orcid ) ;
-		if ( !isset($person) or $person === null ) continue ;
-		$names = $oc->parsePersonAliasesORCID ( $person ) ;
-		$new_candidates = array() ;
-
-		// Name only
-		$named = $paper_i->getClaims ( 'P2093' ) ;
-		$namecount = $oc->initializeNamecount ( $named ) ;
-
-		foreach ( $named AS $n ) {
-			$name = $n->mainsnak->datavalue->value ;
-			$found = $oc->checkNameInAuthorList ( $name , $namecount , $names ) ;
-			if ( !$found ) { // Not in named authors
-#				print "Not found on ORICD author list: [$orcid] $name\n" ;
-				continue ;
-			}
-
-			$num = getNumberQualifier ( $n ) ;
-			$author_q = getOrCreateAuthorItem ( $name , $orcid , $person ) ;
-			if ( !isset($author_q) or $author_q == '' ) continue ; // Paranoia
-
-			// Remove string author, add P50 author
-			$commands = '' ;
-			$commands .= "-$paper_q\tP2093\t\"$name\"\n" ; # Re-activated with "stated as" (after https://www.wikidata.org/wiki/Wikidata_talk:WikiProject_Source_MetaData#Author_names )
-			$commands .= "$paper_q\tP50\t$author_q" ;
-			$commands .= "\tP1932\t\"$name\"" ; # Adding name as "stated as"
-			if ( $num != '' ) $commands .= "\tP1545\t\"$num\"" ;
-			$commands .= "\n" ;
-
-			if ( $testing ) {
-				print "---\n$commands\n" ;
-				break ;
-			}
-
-			$qs = getQS() ;
-			$qs->use_command_compression = true ;
-			$tmp = $qs->importData ( $commands , 'v1' ) ;
-			$qs->runCommandArray ( $tmp['data']['commands'] ) ;
-			$action_taken = 'EDIT' ;
-
-			break ; // Already found it
-		}
-
-
-		// Existing items
-		$candidates = array() ;
-		foreach ( $author_qs AS $q ) {
-			$i = $wil->getItem($q) ;
-			if ( !isset($i) ) continue ;
-			foreach ( $names AS $n ) {
-				if ( !$i->hasLabel($n) ) continue ;
-				$candidates[$i->getQ()] = $orcid ;
-			}
-		}
-		
-		if ( count($candidates) == 0 ) {
-			// No joy
-			continue ;
-		}
-		if ( count($candidates) > 1 ) {
-//			logit ( "Multiple candidates for $orcid" ) ;
-			continue ;
-		}
-		
-		foreach ( $candidates AS $k => $v ) $ret[$k] = $v ;
-
-	}
-	return $ret ;
-}
 
 
 
 function initAuthorsWithORCID () {
 	global $authors_with_orcid ;
-	$authors_with_orcid = array () ;
+	$authors_with_orcid = [] ;
 	$sparql = "SELECT ?q ?orcid { ?q wdt:P496 ?orcid }" ;
 	enforceUncachedSPARQL ( $sparql ) ;
 	$j = getSPARQL ( $sparql ) ;
@@ -613,12 +679,12 @@ function initAuthorsWithORCID () {
 }
 
 function qs2dois ( $list ) {
-	$ret = array() ;
-	$aoa = array ( array () ) ; // Array Of Arrays
+	$ret = [] ;
+	$aoa = array ( [] ) ; // Array Of Arrays
 	foreach ( $list AS $q ) {
 		$q = trim ( strtoupper ( $q ) ) ;
 		if ( !preg_match ( '/^Q\d+$/' , $q ) ) continue ;
-		if ( count($aoa[count($aoa)-1]) >= 20 ) $aoa[] = array() ;
+		if ( count($aoa[count($aoa)-1]) >= 20 ) $aoa[] = [] ;
 		$aoa[count($aoa)-1][] = $q ;
 	}
 
@@ -640,57 +706,5 @@ function qs2dois ( $list ) {
 	return $ret ;
 }
 
-
-function enforceUncachedSPARQL ( &$sparql ) {
-	$r = rand() ;
-	$sparql = explode ( '{' , $sparql , 2 ) ;
-	$sparql = $sparql[0] . " ?fakeVariable{$r} {" . $sparql[1] ;
-}
-
-// $w = [ 'doi'=>'..' , 'pmid'=>'..' , 'pmid'=>'..' ]
-function getOrCreateWorkFromIDs ( $w , $auto_add_authors = true ) {
-	global $tfc , $action_taken , $is_bot_mode , $debugging ;
-	if ( !isset($tfc) ) $tfc = new ToolforgeCommon ;
-	$cond = [] ;
-	if ( isset($w['doi']) ) {
-		$cond[] = '?q wdt:P356 "' . strtoupper($w['doi']) . '"' ;
-		$cond[] = '?q wdt:P356 "' . strtolower($w['doi']) . '"' ;
-	}
-	if ( isset($w['pmid']) ) $cond[] = '?q wdt:P698 "' . $w['pmid'] . '"' ;
-	if ( isset($w['pmc']) ) $cond[] = '?q wdt:P932 "' . preg_replace('/^\D+/','',$w['pmc']) . '"' ;
-	if ( count($cond) == 0 ) return ;
-	$sparql = "SELECT DISTINCT ?q { {" . implode ( '} UNION {' , $cond ) . "} }" ;
-	enforceUncachedSPARQL ( $sparql ) ;
-if($debugging)print "$sparql\n" ;
-	$items = $tfc->getSPARQLitems ( $sparql , 'q' ) ;
-	if ( count($items) > 0 ) { // An item for this work already exists
-		if ( $auto_add_authors and isset($w['doi']) ) addOrCreateAutorsForPaper ( $w['doi'] , $items[0] ) ;
-		return $items[0] ;
-	}
-	$id = '' ;
-	if ( isset($w['doi']) ) $id = $w['doi'] ;
-	else if ( isset($w['pmc']) ) $id = $w['pmc'] ;
-	else if ( isset($w['pmid']) ) $id = $w['pmid'] ;
-	else return ;
-
-if($debugging)print "CREATING NEW WORK FOR {$id}\n" ;
-	$smd = new SourceMD ( $id ) ;
-	if ( $is_bot_mode ) $smd->verbose = false ;
-	$commands = $smd->generateQuickStatements() ;
-	if ( count($commands) < 5 ) return ; # Paranoia
-	$commands = implode ( "\n" , $commands ) ;
-	$qs = getQS() ;
-	$qs->use_command_compression = true ;
-if($debugging)print_r ( $commands ) ;
-	$tmp = $qs->importData ( $commands , 'v1' ) ;
-	$qs->runCommandArray ( $tmp['data']['commands'] ) ;
-	$q = $qs->last_item ;
-if($debugging)print "\n=> https://www.wikidata.org/wiki/{$q}\n" ;
-	if ( $q == 'LAST' ) return ;
-	$action_taken = 'CREATE' ;
-	if ( $auto_add_authors && isset($w['doi']) ) addOrCreateAutorsForPaper ( $w['doi'] , $q ) ;
-	return $q ;
-}
-
-
+*/
 ?>

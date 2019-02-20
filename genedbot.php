@@ -4,7 +4,7 @@
 require_once ( "gff2wd.php" ) ;
 
 set_time_limit ( 60 * 1000 ) ; // Seconds
-ini_set('memory_limit','4000M');
+ini_set('memory_limit','6000M');
 error_reporting(E_ERROR|E_CORE_ERROR|E_COMPILE_ERROR); # |E_ALL
 
 if ( !isset($argv[1]) ) die ( "Species key required\n" ) ;
