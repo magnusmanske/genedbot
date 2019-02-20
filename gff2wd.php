@@ -33,7 +33,52 @@ class GFF2WD {
 		$this->paper_editor = new PaperEditor ( $this->tfc , $this->qs , $this->wil ) ;
 	}
 
+	function createGenomicAssemblyForSpecies ( $species_q ) {
+		$this->wil->loadItems ( [$species_q] ) ;
+		$i = $this->wil->getItem ( $species_q ) ;
+		if ( !isset($i) ) die ( "Cannot get item {$species_q} for species\n" ) ;
+		$taxon_name = $i->getFirstString('P225') ;
+		if ( $taxon_name == '' ) die ( "No P225 in {$species_q}\n" ) ;
+		$commands = [] ;
+		$commands[] = 'CREATE' ;
+		$commands[] = "LAST\tLen\t\"{$taxon_name} reference genome\"" ;
+		$commands[] = "LAST\tP279\tQ7307127" ; # Reference genome
+		$commands[] = "LAST\tP703\t{$species_q}" ; # Found in species
+		$q = $this->tfc->runCommandsQS ( $commands , $this->qs ) ;
+		if ( !isset($q) or $q == '' ) die ( "Could not create item for reference genome for species '{$species_q}'\n" ) ;
+		return $q ;
+	}
+
+	function getGenomicAssemblyForSpecies ( $species_q ) {
+		$sparql = "SELECT ?q { ?q wdt:P279 wd:Q7307127 ; wdt:P703 wd:{$species_q} }" ;
+		$items = $this->tfc->getSPARQLitems ( $sparql ) ;
+		if ( count($items) > 1 ) { # Multiple genomic assemblies for that species, use the numerically largest ~ latest one
+			$qnums = [] ;
+			foreach ( $items AS $q ) $qnums[] = preg_replace('/\D/','',$q)*1 ;
+			sort ( $qnums , SORT_NUMERIC ) ;
+			return 'Q'.array_pop($qnums) ;
+		}
+		if ( count($items) == 0 ) { # No reference genome exists, create one
+			return $this->createGenomicAssemblyForSpecies ( $this->gffj->species ) ;
+		} else { # One reference genome exists, use that one
+			return $items[0] ;
+		}
+		die ( "Can't find genomixc assembly for {$species_q}\n" ) ;
+	}
+
+	function ensureConfigComplete () {
+		if ( !isset($this->gffj->species) ) {
+			die ( "No species item\n" ) ;
+		}
+		if ( !isset($this->gffj->genomic_assembly) ) {
+			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $species_q ) ;
+			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
+		}
+		exit(0);
+	}
+
 	function init ( $genedb_id = '' ) {
+		$this->ensureConfigComplete() ;
 		$this->loadBasicItems() ;
 		$this->loadGAF() ;
 		$this->loadGFF() ;
