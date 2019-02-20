@@ -74,7 +74,6 @@ class GFF2WD {
 			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $species_q ) ;
 			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
 		}
-		exit(0);
 	}
 
 	function init ( $genedb_id = '' ) {
