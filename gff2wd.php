@@ -120,6 +120,14 @@ class GFF2WD {
 		return $q ;
 	}
 
+	function getParentTaxon ( $q ) {
+		$i = $this->wil->getItem ( $q ) ;
+		if ( !isset($i) ) return ;
+		$claims = $i->getClaims ( 'P171' ) ;
+		if ( count($claims) != 1 ) return ;
+		return $i->getTarget ( $claims[0] ) ;
+	}
+
 	function loadBasicItems () {
 		# Load basic items (species, chromosomes)
 		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->gffj->q} }" ) ;
@@ -134,8 +142,14 @@ class GFF2WD {
 			$this->gffj->chr2q[$l] = $q ;
 		}
 
+		# Parent taxon? Used for rewriting species => strain, can be deactivated after
+		$parent_q = $this->getParentTaxon ( $this->gffj->q ) ;
+		$species_list = [ $this->gffj->q ]  ;
+		if ( isset($parent_q) ) $species_list[] = $parent_q ;
+		$species_list = " VALUES ?species { wd:" . implode(' wd:', $species_list) . " } . " ;
+
 		# All genes for this species with GeneDB ID
-		$sparql = "SELECT ?q ?genedb { ?q wdt:P31 wd:Q7187 ; wdt:P703 wd:{$this->gffj->q} ; wdt:P3382 ?genedb }" ;
+		$sparql = "SELECT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q7187 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) or count($j->results->bindings) == 0 ) die ( "SPARQL loading of genes failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
@@ -147,7 +161,8 @@ class GFF2WD {
 		}
 
 		# All protein for this species with GeneDB ID
-		$j = $this->tfc->getSPARQL ( "SELECT ?q ?genedb { ?q wdt:P31 wd:Q8054 ; wdt:P703 wd:{$this->gffj->q} ; wdt:P3382 ?genedb }" ) ;
+		$sparql = "SELECT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q8054 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
+		$j = $this->tfc->getSPARQL ( $sparql ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) ) die ( "SPARQL loading of proteins failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
