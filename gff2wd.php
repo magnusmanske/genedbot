@@ -157,7 +157,7 @@ class GFF2WD {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 			if ( !$this->isRealItem($q) ) continue ;
 			$genedb_id = $v->genedb->value ;
-			if ( isset($this->genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} for gene {$q} and {$this->genedb2q[$genedb_id]}\n" ) ;
+			if ( isset($this->genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->gffj->q} for gene {$q} and {$this->genedb2q[$genedb_id]}\n" ) ;
 			$this->genedb2q[$genedb_id] = $q ;
 		}
 
@@ -169,7 +169,7 @@ class GFF2WD {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 			if ( !$this->isRealItem($q) ) continue ;
 			$genedb_id = $v->genedb->value ;
-			if ( isset($this->protein_genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} for protein {$q} and {$this->protein_genedb2q[$genedb_id]}\n" ) ;
+			if ( isset($this->protein_genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->gffj->q} for protein {$q} and {$this->protein_genedb2q[$genedb_id]}\n" ) ;
 			$this->protein_genedb2q[$genedb_id] = $q ;
 		}
 
