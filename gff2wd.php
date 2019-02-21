@@ -150,7 +150,7 @@ class GFF2WD {
 		$species_list = " VALUES ?species { wd:" . implode(' wd:', $species_list) . " } . " ;
 
 		# All genes for this species with GeneDB ID
-		$sparql = "SELECT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q7187 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
+		$sparql = "SELECT DISTINCT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q7187 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) or count($j->results->bindings) == 0 ) die ( "SPARQL loading of genes failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
@@ -162,7 +162,7 @@ class GFF2WD {
 		}
 
 		# All protein for this species with GeneDB ID
-		$sparql = "SELECT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q8054 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
+		$sparql = "SELECT DISTINCT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q8054 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) ) die ( "SPARQL loading of proteins failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
@@ -174,7 +174,7 @@ class GFF2WD {
 		}
 
 		# Evidence codes
-		$sparql = 'SELECT ?q ?qLabel { ?q wdt:P31 wd:Q23173209 SERVICE wikibase:label { bd:serviceParam wikibase:language "en" } }' ;
+		$sparql = 'SELECT DISTINCT ?q ?qLabel { ?q wdt:P31 wd:Q23173209 SERVICE wikibase:label { bd:serviceParam wikibase:language "en" } }' ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 		foreach ( $j->results->bindings AS $b ) {
 			$label = $b->qLabel->value ;
