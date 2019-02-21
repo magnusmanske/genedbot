@@ -20,6 +20,8 @@ $tfc = new ToolforgeCommon('mytoolname') ;
 
 final class ToolforgeCommon {
 
+	public $log_sparql_requests = false ;
+
 	public /*string*/ $toolname ;
 	public $prefilled_requests = [] ;
 	public /*string*/ $tool_user_name ; # force different DB user name
@@ -411,6 +413,7 @@ final class ToolforgeCommon {
 
 	// Takes a SPARQL query, adds the tool name (for reacking at query server), returns the decoded JSON result
 	public function getSPARQL ( $cmd ) {
+		if ( $this->log_sparql_requests ) print "SPARQL: {$cmd}\n" ;
 		$sparql = "$cmd\n#TOOL: {$this->toolname}" ;
 		$url = "https://query.wikidata.org/sparql?format=json&query=" . urlencode($sparql) ;
 

@@ -27,6 +27,7 @@ class GFF2WD {
 	function __construct () {
 		global $qs ;
 		$this->tfc = new ToolforgeCommon ( 'genedb' ) ;
+		$this->tfc->log_sparql_requests = true ; # TESTING
 		$this->qs = $this->tfc->getQS ( 'genedb' , __DIR__. '/bot.ini' , true ) ;
 		$qs = $this->qs ;
 		$this->wil = new WikidataItemList () ;
