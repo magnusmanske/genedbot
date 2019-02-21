@@ -330,6 +330,7 @@ class GFF2WD {
 			'descriptions' => [ 'ignore_except'=>['en'] ] ,
 			'aliases' => [ 'ignore_except'=>['en'] ] ,
 			'remove_only' => [
+				'P703', // Found in taxon
 				'P680', // Molecular function
 				'P681', // Cell component
 				'P682', // Biological process
@@ -545,7 +546,12 @@ class GFF2WD {
 			'labels' => [ 'ignore_except'=>['en'] ] ,
 			'descriptions' => [ 'ignore_except'=>['en'] ] ,
 			'aliases' => [ 'ignore_except'=>['en'] ] ,
-			'remove_only' => ['P680','P681','P682']
+			'remove_only' => [
+				'P703', // Found in taxon
+				'P680',
+				'P681',
+				'P682'
+			]
 		] ;
 		$diff = $protein_i->diffToItem ( $item_to_diff , $options ) ;
 
