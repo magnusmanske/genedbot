@@ -71,7 +71,7 @@ class GFF2WD {
 			die ( "No species item\n" ) ;
 		}
 		if ( !isset($this->gffj->genomic_assembly) ) {
-			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $species_q ) ;
+			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $this->gffj->q ) ;
 			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
 		}
 	}
