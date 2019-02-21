@@ -59,7 +59,7 @@ class GFF2WD {
 			return 'Q'.array_pop($qnums) ;
 		}
 		if ( count($items) == 0 ) { # No reference genome exists, create one
-			return $this->createGenomicAssemblyForSpecies ( $this->gffj->species ) ;
+			return $this->createGenomicAssemblyForSpecies ( $this->gffj->q ) ;
 		} else { # One reference genome exists, use that one
 			return $items[0] ;
 		}
@@ -67,7 +67,7 @@ class GFF2WD {
 	}
 
 	function ensureConfigComplete () {
-		if ( !isset($this->gffj->species) ) {
+		if ( !isset($this->gffj->q) ) {
 			die ( "No species item\n" ) ;
 		}
 		if ( !isset($this->gffj->genomic_assembly) ) {
@@ -113,7 +113,7 @@ class GFF2WD {
 		$commands[] = 'CREATE' ;
 		$commands[] = "LAST\tLen\t\"{$chr}\"" ;
 		$commands[] = "LAST\tP31\tQ37748" ; # Chromosome
-		$commands[] = "LAST\tP703\t{$this->gffj->species}" ;
+		$commands[] = "LAST\tP703\t{$this->gffj->q}" ;
 		$q = $this->tfc->runCommandsQS ( $commands , $this->qs ) ;
 		if ( !isset($q) or $q == '' ) die ( "Could not create item for chromosome '{$chr}'\n" ) ;
 		$this->gffj->chr2q[$chr] = $q ;
@@ -122,8 +122,8 @@ class GFF2WD {
 
 	function loadBasicItems () {
 		# Load basic items (species, chromosomes)
-		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->gffj->species} }" ) ;
-		$items[] = $this->gffj->species ;
+		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->gffj->q} }" ) ;
+		$items[] = $this->gffj->q ;
 		$this->wil->loadItems ( $items ) ;
 		$this->gffj->chr2q = [] ;
 		foreach ( $items AS $q ) {
@@ -135,7 +135,7 @@ class GFF2WD {
 		}
 
 		# All genes for this species with GeneDB ID
-		$sparql = "SELECT ?q ?genedb { ?q wdt:P31 wd:Q7187 ; wdt:P703 wd:{$this->gffj->species} ; wdt:P3382 ?genedb }" ;
+		$sparql = "SELECT ?q ?genedb { ?q wdt:P31 wd:Q7187 ; wdt:P703 wd:{$this->gffj->q} ; wdt:P3382 ?genedb }" ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) or count($j->results->bindings) == 0 ) die ( "SPARQL loading of genes failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
@@ -147,7 +147,7 @@ class GFF2WD {
 		}
 
 		# All protein for this species with GeneDB ID
-		$j = $this->tfc->getSPARQL ( "SELECT ?q ?genedb { ?q wdt:P31 wd:Q8054 ; wdt:P703 wd:{$this->gffj->species} ; wdt:P3382 ?genedb }" ) ;
+		$j = $this->tfc->getSPARQL ( "SELECT ?q ?genedb { ?q wdt:P31 wd:Q8054 ; wdt:P703 wd:{$this->gffj->q} ; wdt:P3382 ?genedb }" ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) ) die ( "SPARQL loading of proteins failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
@@ -274,7 +274,7 @@ class GFF2WD {
 
 		$gene_i->addClaim ( $gene_i->newClaim('P31',$gene_i->newItem('Q7187') , [$refs] ) ) ; # Instance of:gene
 		$gene_i->addClaim ( $gene_i->newClaim('P279',$gene_i->newItem('Q20747295') , [$refs] ) ) ; # Subclass of:protein-coding gene
-		$gene_i->addClaim ( $gene_i->newClaim('P703',$gene_i->newItem($this->gffj->species) , [$refs] ) ) ; # Found in:Species
+		$gene_i->addClaim ( $gene_i->newClaim('P703',$gene_i->newItem($this->gffj->q) , [$refs] ) ) ; # Found in:Species
 		$gene_i->addClaim ( $gene_i->newClaim('P1057',$gene_i->newItem($chr_q) , [$refs] ) ) ; # Chromosome
 		$gene_i->addClaim ( $gene_i->newClaim('P2548',$gene_i->newItem($strand_q) , [$refs] , $ga_quals ) ) ; # Strand
 
@@ -428,7 +428,7 @@ class GFF2WD {
 
 		$protein_i->addClaim ( $protein_i->newClaim('P31',$protein_i->newItem('Q8054') , [$refs] ) ) ; # Instance of:protein
 		$protein_i->addClaim ( $protein_i->newClaim('P279',$protein_i->newItem('Q8054') , [$refs] ) ) ; # Subclass of:protein
-		$protein_i->addClaim ( $protein_i->newClaim('P703',$protein_i->newItem($this->gffj->species) , [$refs] ) ) ; # Found in:Species
+		$protein_i->addClaim ( $protein_i->newClaim('P703',$protein_i->newItem($this->gffj->q) , [$refs] ) ) ; # Found in:Species
 		if ( $gene_q != 'LAST' ) $protein_i->addClaim ( $protein_i->newClaim('P702',$protein_i->newItem($gene_q) , [$refs] ) ) ; # Encoded by:gene
 		$protein_i->addClaim ( $protein_i->newClaim('P3382',$protein_i->newString($genedb_id) , [$refs] ) ) ; # GeneDB ID
 
