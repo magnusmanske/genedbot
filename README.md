@@ -13,4 +13,4 @@ pass = WikidataBotUserPassword
 ```
 php genedbot.php SPECIES_ID
 ```
-where `SPECIES_ID` is a key in `config.json`
+where `SPECIES_ID` is an `abbreviation` in [the dataset](https://www.genedb.org/data/datasets.json).
