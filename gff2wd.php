@@ -359,7 +359,8 @@ class GFF2WD {
 		} else {
 			if ( !$this->qs->runBotAction ( $params ) ) {
 				print_r ( $params ) ;
-				die ( "Failed trying to edit gene '{$genedb_id}': '{$oa->error}' / ".json_encode($qs->last_res)."\n" ) ;
+				print "Failed trying to edit gene '{$genedb_id}': '{$oa->error}' / ".json_encode($qs->last_res)."\n" ;
+				return ;
 			}
 			if ( $gene_q == 'LAST' ) {
 				$new_gene_q = $qs->last_res->entity->id ;
@@ -569,7 +570,8 @@ class GFF2WD {
 			if ( $protein_q == 'LAST' ) die ( "Cannot create empty protein for gene {$gene_q}\n" ) ; # Paranoia
 		} else {
 			if ( !$this->qs->runBotAction ( $params ) ) {
-				die ( "Failed trying to edit protein '{$label}': '{$oa->error}' / ".json_encode($qs->last_res)."\n" ) ;
+				print "Failed trying to edit protein '{$label}': '{$oa->error}' / ".json_encode($qs->last_res)."\n" ;
+				return ;
 			}
 			if ( $protein_q == 'LAST' ) {
 				$protein_q = $qs->last_res->entity->id ;
