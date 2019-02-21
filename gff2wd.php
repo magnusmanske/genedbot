@@ -73,7 +73,7 @@ class GFF2WD {
 		}
 		if ( !isset($this->gffj->genomic_assembly) ) {
 			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $this->gffj->q ) ;
-			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
+#			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
 		}
 	}
 
