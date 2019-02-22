@@ -289,7 +289,6 @@ class GFF2WD {
 		$strand_q = $gene['strand'] == '+' ? 'Q22809680' : 'Q22809711' ;
 
 		$gene_i->addClaim ( $gene_i->newClaim('P31',$gene_i->newItem('Q7187') , [$refs] ) ) ; # Instance of:gene
-		$gene_i->addClaim ( $gene_i->newClaim('P279',$gene_i->newItem('Q20747295') , [$refs] ) ) ; # Subclass of:protein-coding gene
 		$gene_i->addClaim ( $gene_i->newClaim('P703',$gene_i->newItem($this->gffj->q) , [$refs] ) ) ; # Found in:Species
 		$gene_i->addClaim ( $gene_i->newClaim('P1057',$gene_i->newItem($chr_q) , [$refs] ) ) ; # Chromosome
 		$gene_i->addClaim ( $gene_i->newClaim('P2548',$gene_i->newItem($strand_q) , [$refs] , $ga_quals ) ) ; # Strand
@@ -302,9 +301,12 @@ class GFF2WD {
 		# Do protein
 		$protein_qs = $this->createOrAmendProteinItems ( $g , $gene_q ) ;
 		if ( count($protein_qs) > 0 ) { # Encodes
+			$gene_i->addClaim ( $gene_i->newClaim('P279',$gene_i->newItem('Q20747295') , [$refs] ) ) ; # Subclass of:protein-coding gene
 			foreach ( $protein_qs AS $protein_q ) {
 				$gene_i->addClaim ( $gene_i->newClaim('P688',$gene_i->newItem($protein_q) , [$refs] ) ) ; # Encodes:Protein
 			}
+		} else {
+			# rRNA/pseudogene etc.
 		}
 
 		# Orthologs
@@ -331,6 +333,7 @@ class GFF2WD {
 			'descriptions' => [ 'ignore_except'=>['en'] ] ,
 			'aliases' => [ 'ignore_except'=>['en'] ] ,
 			'remove_only' => [
+				'P279', // Subclass of (mostly to remove protein-coding gene)
 				'P703', // Found in taxon
 				'P680', // Molecular function
 				'P681', // Cell component
