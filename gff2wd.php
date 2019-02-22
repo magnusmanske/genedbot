@@ -23,6 +23,15 @@ class GFF2WD {
 	var $evidence_codes = [] ;
 	var $sparql_result_cache = [] ;
 	var $paper_editor ;
+	var $other_types = [] ;
+	var $alternate_gene_subclasses = [
+		'tRNA' => 'Q201448' ,
+		'rRNA' => 'Q215980' ,
+		'pseudogene' => 'Q277338' ,
+		'snoRNA' => 'Q284416' ,
+		'ncRNA' => 'Q427087' ,
+		'snRNA' => 'Q284578' ,
+	] ;
 
 	function __construct () {
 		global $qs ;
@@ -209,7 +218,15 @@ class GFF2WD {
 		$orth_ids = [] ;
 		while ( $r = $gff->nextEntry() ) {
 			if ( isset($r['comment']) ) continue ;
-			if ( !in_array ( $r['type'] , ['gene','mRNA'] ) ) continue ;
+			if ( !in_array ( $r['type'] , ['gene','mRNA'] ) ) {
+				if ( isset($r['attributes']) and isset($r['attributes']['ID']) ) {
+					$id = $r['attributes']['ID'] ;
+					$id = preg_replace ( '/:.*$/' , '' , $id ) ;
+					$id = preg_replace ( '/\.\d$/' , '' , $id ) ;
+					$this->other_types[$r['type']][$id] = 1 ;
+				}
+				continue ;
+			}
 			if ( isset($r['attributes']['Parent']) ) $this->genes[$r['attributes']['Parent']][$r['type']][] = $r ;
 			else $this->genes[$r['attributes']['ID']]['gene'] = $r ;
 			if ( isset($r['attributes']['orthologous_to']) ) {
@@ -305,8 +322,16 @@ class GFF2WD {
 			foreach ( $protein_qs AS $protein_q ) {
 				$gene_i->addClaim ( $gene_i->newClaim('P688',$gene_i->newItem($protein_q) , [$refs] ) ) ; # Encodes:Protein
 			}
-		} else {
-			# rRNA/pseudogene etc.
+		} else { # tRNA/rRNA/pseudogene etc.
+			$found = false ;
+			foreach ( $this->alternate_gene_subclasses AS $k => $v ) {
+				if ( !isset($this->other_types[$k]) ) continue ;
+				if ( !isset($this->other_types[$k][$genedb_id]) ) continue ;
+				$gene_i->addClaim ( $gene_i->newClaim('P279',$gene_i->newItem($v) , [$refs] ) ) ;
+				$found = true ;
+				break ;
+			}
+			if ( !$found ) print "No subclass found for {$genedb_id}\n" ;
 		}
 
 		# Orthologs
@@ -416,7 +441,7 @@ class GFF2WD {
 	function createOrAmendProteinItems ( $g , $gene_q ) {
 		$ret = [] ;
 		if ( !isset($g['mRNA']) ) {
-			print ( "No attributes for mRNA\n".json_encode($g)."\n" ) ;
+#			print ( "No attributes for mRNA\n".json_encode($g)."\n" ) ;
 		} else {
 			foreach ( $g['mRNA'] AS $protein ) {
 				if ( !isset($protein['attributes']) ) die ( "No attributes for protein\n".json_encode($g)."\n" ) ;
