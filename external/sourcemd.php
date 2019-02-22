@@ -512,7 +512,7 @@ class SourceMD {
 		$url = "http://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&versions=no&format=json&ids=" . urlencode($id) ;
 		$j = @file_get_contents ( $url ) ;
 		if ( $j === false ) {
-			print "<p>Failed to load $url</p>" ;
+			print "Failed to load PubMed: $url\n" ;
 			return ;
 		}
 		$j = json_decode ( $j ) ;
