@@ -653,7 +653,7 @@ class GFF2WD {
 		}
 		$cache[$go_term] = $go_term ;
 		$go_term = $j->results[0]->id ;
-		return $this->getItemForGoTerm ( $go_term ) ;
+		return $this->getItemForGoTerm ( $go_term , $cache ) ;
 	}
 
 
