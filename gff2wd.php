@@ -363,6 +363,7 @@ class GFF2WD {
 				'P680', // Molecular function
 				'P681', // Cell component
 				'P682', // Biological process
+				'P684', // Ortholog
 				'P1057', // Chromosome
 				'P2548', // Strand orientation
 				'P644', // Genomic start
