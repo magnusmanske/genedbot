@@ -218,7 +218,7 @@ class GFF2WD {
 		$orth_ids = [] ;
 		while ( $r = $gff->nextEntry() ) {
 			if ( isset($r['comment']) ) continue ;
-			if ( !in_array ( $r['type'] , ['gene','mRNA'] ) ) {
+			if ( !in_array ( $r['type'] , ['gene','mRNA','pseudogene'] ) ) {
 				if ( isset($r['attributes']) and isset($r['attributes']['ID']) ) {
 					$id = $r['attributes']['ID'] ;
 					$id = preg_replace ( '/:.*$/' , '' , $id ) ;
@@ -228,7 +228,7 @@ class GFF2WD {
 				continue ;
 			}
 			if ( isset($r['attributes']['Parent']) ) $this->genes[$r['attributes']['Parent']][$r['type']][] = $r ;
-			else $this->genes[$r['attributes']['ID']]['gene'] = $r ;
+			else $this->genes[$r['attributes']['ID']][$r['type']] = $r ;
 			if ( isset($r['attributes']['orthologous_to']) ) {
 				foreach ( $r['attributes']['orthologous_to'] AS $orth ) {
 					if ( !preg_match ( '/^\s*\S+?:(\S+)/' , $orth , $m ) ) continue ;
@@ -257,11 +257,16 @@ class GFF2WD {
 	}
 
 	public function createOrAmendGeneItem ( $g ) {
-		if ( !isset($g['gene']) ) {
+		$types = [] ;
+		if ( isset($g['gene']) ) {
+			$types = ['gene','Q7187'] ;
+		} else if ( isset($g['pseudogene']) ) {
+			$types = ['pseudogene','Q277338'] ;
+		} else {
 			print "No gene:\n".json_encode($g)."\n" ;
 			return ;
 		}
-		$gene = $g['gene'] ;
+		$gene = $g[$types[0]] ;
 		if ( !isset($gene['attributes']) ) {
 			print "No attributes for gene\n".json_encode($g)."\n" ;
 			return ;
@@ -305,7 +310,7 @@ class GFF2WD {
 		] ;
 		$strand_q = $gene['strand'] == '+' ? 'Q22809680' : 'Q22809711' ;
 
-		$gene_i->addClaim ( $gene_i->newClaim('P31',$gene_i->newItem('Q7187') , [$refs] ) ) ; # Instance of:gene
+		$gene_i->addClaim ( $gene_i->newClaim('P31',$gene_i->newItem($types[1]) , [$refs] ) ) ; # Instance of
 		$gene_i->addClaim ( $gene_i->newClaim('P703',$gene_i->newItem($this->gffj->q) , [$refs] ) ) ; # Found in:Species
 		$gene_i->addClaim ( $gene_i->newClaim('P1057',$gene_i->newItem($chr_q) , [$refs] ) ) ; # Chromosome
 		$gene_i->addClaim ( $gene_i->newClaim('P2548',$gene_i->newItem($strand_q) , [$refs] , $ga_quals ) ) ; # Strand
@@ -322,6 +327,8 @@ class GFF2WD {
 			foreach ( $protein_qs AS $protein_q ) {
 				$gene_i->addClaim ( $gene_i->newClaim('P688',$gene_i->newItem($protein_q) , [$refs] ) ) ; # Encodes:Protein
 			}
+		} else if ( $types[0] != 'gene' ) {
+			$gene_i->addClaim ( $gene_i->newClaim('P279',$gene_i->newItem($types[1]) , [$refs] ) ) ;
 		} else { # tRNA/rRNA/pseudogene etc.
 			$found = false ;
 			foreach ( $this->alternate_gene_subclasses AS $k => $v ) {
@@ -331,7 +338,9 @@ class GFF2WD {
 				$found = true ;
 				break ;
 			}
-			if ( !$found ) print "No subclass found for {$genedb_id}\n" ;
+			if ( !$found ) {
+				print "No subclass found for {$genedb_id}\n" ;
+			}
 		}
 
 		# Orthologs
@@ -723,6 +732,7 @@ class GFF2WD {
 	function run ( $genedb_id = '' ) {
 		if ( !isset($genedb_id) ) $genedb_id = '' ;
 		if ( $genedb_id != '' ) { # Single gene mode, usually for testing
+			if ( !isset($this->genes[$genedb_id]) ) die ( "No such gene '{$genedb_id}'\n" ) ;
 			$this->createOrAmendGeneItem ( $this->genes[$genedb_id] ) ;
 			return ;
 		}
