@@ -518,6 +518,7 @@ class GFF2WD {
 				$lit_source = [] ;
 				$lit_id = $ga['db_ref'] ;
 				if ( $lit_id == 'WORKSHOP' ) continue ; // Huh
+				if ( preg_match('/^(.+?)\|/',$lit_id,$m) ) $lit_id = $m[1] ; # "1234|something" => "1234"
 				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
 				if ( isset($lit_q) ) {
 					$lit_source = [ 'P248' , $protein_i->newItem($lit_q) ] ;
