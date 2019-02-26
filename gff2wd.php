@@ -100,7 +100,9 @@ class GFF2WD {
 			if ( !file_exists($gff_filename) ) die ( "No GFF file: {$gff_filename}\n") ;
 			return $gff_filename ;
 		} else { # DEFAULT: FTP
-			return "ftp://ftp.sanger.ac.uk/pub/genedb/apollo_releases/latest/" . $this->gffj->file_root.'.gff3.gz' ; ;
+			$root = $this->gffj->file_root ;
+			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/{$root}/{$root}.gff.gz" ;
+#			return "ftp://ftp.sanger.ac.uk/pub/genedb/apollo_releases/latest/" . $this->gffj->file_root.'.gff3.gz' ; ;
 		}
 	}
 
@@ -111,7 +113,9 @@ class GFF2WD {
 			if ( !file_exists($gaf_filename) ) die ( "No GAF file: {$gaf_filename}\n") ;
 			return $gaf_filename ;
 		} else { # DEFAULT: FTP
-			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/" . $this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
+			$root = $this->gffj->file_root ;
+			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/{$root}/{$root}.gaf.gz" ;
+#			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/" . $this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
 		}
 	}
 
