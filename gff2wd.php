@@ -236,7 +236,6 @@ class GFF2WD {
 			if ( isset($r['attributes']['orthologous_to']) ) {
 				foreach ( $r['attributes']['orthologous_to'] AS $orth ) {
 					if ( !preg_match ( '/^\s*\S+?:(\S+)/' , $orth , $m ) ) continue ;
-#if ( preg_match ( '/PRELSG_1210800/' , $orth ) ) print "!{$orth}!\n" ;
 					$orth_ids[$m[1]] = 1 ;
 				}
 			}
@@ -247,17 +246,20 @@ class GFF2WD {
 		foreach ( $orth_chunks AS $chunk ) {
 			$sparql = "SELECT ?q ?genedb ?taxon { VALUES ?genedb { '" . implode("' '",$chunk) . "' } . ?q wdt:P3382 ?genedb ; wdt:P703 ?taxon }" ;
 			$j = $this->tfc->getSPARQL ( $sparql ) ;
-#if ( in_array('PRELSG_1210800',$chunk) ) print_r($j);
 			foreach ( $j->results->bindings AS $v ) {
 				$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 				$q_taxon = $this->tfc->parseItemFromURL ( $v->taxon->value ) ;
 				$genedb = $v->genedb->value ;
-#if ( $genedb == 'PRELSG_1210800' ) print "{$genedb}\t{$q}\t{$q_taxon}\n" ;
 				$this->orth_genedb2q[$genedb] = $q ;
 				$this->orth_genedb2q_taxon[$genedb] = $q_taxon ;
 			}
 		}
 
+	}
+
+	private function fixAliasName ( $s ) {
+		$s = preg_replace ( '/;.*$/' , '' , $s ) ;
+		return $s ;
 	}
 
 	public function createOrAmendGeneItem ( $g ) {
@@ -299,9 +301,9 @@ class GFF2WD {
 		}
 
 		if ( isset($gene['attributes']['previous_systematic_id']) ) {
-			foreach ( $gene['attributes']['previous_systematic_id'] AS $v ) $gene_i->addAlias ( 'en' , $v ) ;
+			foreach ( $gene['attributes']['previous_systematic_id'] AS $v ) $gene_i->addAlias ( 'en' , $this->fixAliasName($v) ) ;
 		}
-		if ( isset($gene['attributes']['synonym']) ) $gene_i->addAlias ( 'en' , $gene['attributes']['synonym'] ) ;
+		if ( isset($gene['attributes']['synonym']) ) $gene_i->addAlias ( 'en' , $this->fixAliasName($gene['attributes']['synonym']) ) ;
 
 		# Statements
 		$refs = [
@@ -510,7 +512,14 @@ class GFF2WD {
 
 		if ( isset($protein['attributes']) and isset($protein['attributes']['product']) and is_array($protein['attributes']['product']) ) {
 			foreach ( $protein['attributes']['product'] AS $v ) {
-				if ( preg_match ( '/^with=InterPro:(.+)$/' , $v , $m ) ) {
+				if ( preg_match ( '/^term=(.+)$/' , $v , $m ) ) {
+					if ( $label == $genedb_id ) {
+						$label = $m[1] ;
+						$protein_i->addAlias ( 'en' , $genedb_id ) ;
+					} else {
+						$protein_i->addAlias ( 'en' , $m[1] ) ;
+					}
+				} else if ( preg_match ( '/^with=InterPro:(.+)$/' , $v , $m ) ) {
 #					$protein_i->addClaim ( $protein_i->newClaim('P2926',$protein_i->newString($m[1]) , [$refs] ) ) ; # Deactivated; applies to family?
 				}
 			}
@@ -542,11 +551,8 @@ class GFF2WD {
 					} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
 						$lit_source = [ 'P2926' , $protein_i->newString($m[1]) ] ;
 					} else {
-#						print "!!{$ga['with_from']} / {$lit_id}\n" ;
 					}
 				}
-
-#				if ( count($lit_source) == 0 ) continue ; # Paranoia
 
 				$qualifiers = [
 					$protein_i->newSnak ( 'P459' , $protein_i->newItem($evidence_code_q) )
@@ -570,7 +576,7 @@ class GFF2WD {
 					$label = $ga['name'] ;
 					$protein_i->addAlias ( 'en' , $genedb_id ) ;
 				}
-				foreach ( $ga['synonym'] AS $alias ) $protein_i->addAlias ( 'en' , $alias ) ;
+				foreach ( $ga['synonym'] AS $alias ) $protein_i->addAlias ( 'en' , $this->fixAliasName($alias) ) ;
 			}
 		}
 
