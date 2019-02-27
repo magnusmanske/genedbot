@@ -301,9 +301,13 @@ class GFF2WD {
 		}
 
 		if ( isset($gene['attributes']['previous_systematic_id']) ) {
-			foreach ( $gene['attributes']['previous_systematic_id'] AS $v ) $gene_i->addAlias ( 'en' , $this->fixAliasName($v) ) ;
+			foreach ( $gene['attributes']['previous_systematic_id'] AS $v ) {
+				foreach ( explode(',',$this->fixAliasName($v)) AS $v2 ) $gene_i->addAlias ( 'en' , $v2 ) ;
+			}
 		}
-		if ( isset($gene['attributes']['synonym']) ) $gene_i->addAlias ( 'en' , $this->fixAliasName($gene['attributes']['synonym']) ) ;
+		if ( isset($gene['attributes']['synonym']) ) {
+			foreach ( explode(',',$this->fixAliasName($gene['attributes']['synonym'])) AS $v2 ) $gene_i->addAlias ( 'en' , $v2 ) ;
+		}
 
 		# Statements
 		$refs = [
@@ -576,7 +580,9 @@ class GFF2WD {
 					$label = $ga['name'] ;
 					$protein_i->addAlias ( 'en' , $genedb_id ) ;
 				}
-				foreach ( $ga['synonym'] AS $alias ) $protein_i->addAlias ( 'en' , $this->fixAliasName($alias) ) ;
+				foreach ( $ga['synonym'] AS $alias ) {
+					foreach ( explode(',',$this->fixAliasName($alias)) AS $v2 ) $protein_i->addAlias ( 'en' , $v2 ) ;
+				}
 			}
 		}
 
