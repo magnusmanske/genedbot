@@ -20,6 +20,7 @@ class GFF2WD {
 	public $qs ;
 	var $go_term_cache ;
 	var $aspects = [ 'P' => 'P682' , 'F' => 'P680' , 'C' => 'P681' ] ;
+	var $tmhmm_q = 'Q61895944' ;
 	var $evidence_codes = [] ;
 	var $sparql_result_cache = [] ;
 	var $paper_editor ;
@@ -146,6 +147,7 @@ class GFF2WD {
 		# Load basic items (species, chromosomes)
 		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->gffj->q} }" ) ;
 		$items[] = $this->gffj->q ;
+		$items[] = $this->tmhmm_q ;
 		$this->wil->loadItems ( $items ) ;
 		$this->gffj->chr2q = [] ;
 		foreach ( $items AS $q ) {
@@ -473,7 +475,7 @@ class GFF2WD {
 		return $ret ;
 	}
 
-	# This returns the Wikidata item for a single protein
+	# This returns the Wikidata item ID for a single protein
 	function createOrAmendProteinItem ( $gene_q , $protein ) {
 		$genedb_id = $protein['attributes']['ID'] ;
 		$label = $genedb_id ;
@@ -561,9 +563,17 @@ class GFF2WD {
 				$qualifiers = [
 					$protein_i->newSnak ( 'P459' , $protein_i->newItem($evidence_code_q) )
 				] ;
+
+				// The with/from annotation can either be a UniProt link, a GeneDB link, InterPro ID, Pfam ID or a link to TMHMM.
 				if ( isset($ga['with_from']) ) {
 					if ( preg_match ( '/^Pfam:(.+)$/' , $ga['with_from'] , $m ) ) {
 						$qualifiers[] = $protein_i->newSnak ( 'P3519' , $protein_i->newString($m[1]) ) ;
+					} else if ( preg_match ( '/^UniProt:(.+)$/' , $ga['with_from'] , $m ) ) {
+						$qualifiers[] = $protein_i->newSnak ( 'P352' , $protein_i->newString($m[1]) ) ;
+					} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
+						$qualifiers[] = $protein_i->newSnak ( 'P2926' , $protein_i->newString($m[1]) ) ;
+					} else if ( $ga['with_from'] == 'CBS:TMHMM' ) {
+						$qualifiers[] = $protein_i->newSnak ( 'P2283' , $protein_i->newItem($this->tmhmm_q) ) ;
 					}
 				}
 
