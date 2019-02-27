@@ -564,6 +564,10 @@ class GFF2WD {
 					$protein_i->newSnak ( 'P459' , $protein_i->newItem($evidence_code_q) )
 				] ;
 
+				if ( isset($ga['qualifier']) and $ga['qualifier']=='NOT' ) {
+					$qualifiers[] = $protein_i->newSnak ( 'P6477' , $protein_i->newItem('Q186290') ) ; // "does not have quality:correlation"
+				}
+
 				// The with/from annotation can either be a UniProt link, a GeneDB link, InterPro ID, Pfam ID or a link to TMHMM.
 				if ( isset($ga['with_from']) ) {
 					if ( preg_match ( '/^Pfam:(.+)$/' , $ga['with_from'] , $m ) ) {
