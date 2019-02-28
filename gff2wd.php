@@ -662,6 +662,8 @@ class GFF2WD {
 			$this->wil->loadItems ( [$lit_q] ) ;
 			$lit_i = $this->wil->getItem ( $lit_q ) ;
 			if ( !isset($lit_i) ) continue ;
+			$claims = $lit_i->getClaims('P921') ;
+			if ( count($claims) >= 100 ) continue ; // Too many, Rick, too many!
 			if ( $lit_i->hasTarget('P921',$protein_q) ) continue ;
 			if ( !isset($protein_q) or $protein_q=='' or $protein_q=='Q' ) continue ;
 			$commands[] = "{$lit_q}\tP921\t{$protein_q}" ;
