@@ -230,6 +230,11 @@ class GFF2WD {
 					$id = preg_replace ( '/:.*$/' , '' , $id ) ;
 					$id = preg_replace ( '/\.\d$/' , '' , $id ) ;
 					$this->other_types[$r['type']][$id] = 1 ;
+					if ( isset($r['attributes']['Parent']) ) {
+						$parent_id = $r['attributes']['Parent'] ;
+						$this->other_types[$r['type']][$parent_id] = 1 ;
+					}
+
 				}
 				continue ;
 			}
