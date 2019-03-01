@@ -8,6 +8,7 @@ require_once ( __DIR__ . '/external/orcid_shared.php' ) ;
 $qs = '' ;
 
 class GFF2WD {
+	public $load_orth_data = true ; # Set to false for debugging => faster
 	var $use_local_data_files = false ;
 	var $tfc , $wil ;
 	var $gffj ;
@@ -243,7 +244,7 @@ class GFF2WD {
 			if ( isset($r['attributes']['orthologous_to']) ) {
 				foreach ( $r['attributes']['orthologous_to'] AS $orth ) {
 					if ( !preg_match ( '/^\s*\S+?:(\S+)/' , $orth , $m ) ) continue ;
-					$orth_ids[$m[1]] = 1 ;
+					if ( $this->load_orth_data ) $orth_ids[$m[1]] = 1 ;
 				}
 			}
 		}
@@ -618,6 +619,7 @@ class GFF2WD {
 		}
 
 		$options = [
+			'validator' => function ( $type , $action ,  &$old_item  , &$new_item ) { return $this->proteinEditValidator ( $type , $action , $old_item , $new_item ) ; } ,
 			'ref_skip_p'=>['P813'] ,
 			'labels' => [ 'ignore_except'=>['en'] ] ,
 			'descriptions' => [ 'ignore_except'=>['en'] ] ,
@@ -672,6 +674,30 @@ class GFF2WD {
 
 		return $protein_q ;
 	}
+
+	function proteinEditValidator ( $type , $action ,  &$old_item  , &$new_item ) {
+		 # Block removal of claims [GO terms] that have a reference a non-GeneDB curator
+		if ( $type != 'claims' ) return true ;
+		if ( !isset($action->id) or !isset($action->remove) ) return true ;
+		$claim = $old_item->getClaimByID ( $action->id ) ;
+		if ( !isset($claim) ) return true ;
+		if ( !isset($claim->mainsnak) ) return true ;
+		if ( !isset($claim->mainsnak->property) ) return true ;
+		if ( !in_array($claim->mainsnak->property,['P680','P681','P682']) ) return true ;
+		if ( !isset($claim->references) ) return true ;
+		if ( count($claim->references) != 1 ) return false ; # More than one reference, do not remove
+		$r = $claim->references[0] ;
+		if ( !isset($r->snaks) ) return true ;
+		if ( !isset($r->snaks->P1640) ) return true ;
+		if ( count($r->snaks->P1640) != 1 ) return true ;
+		$curator = $r->snaks->P1640[0] ;
+		if ( !isset($curator->datavalue) ) return true ;
+		if ( !isset($curator->datavalue->value) ) return true ;
+		if ( !isset($curator->datavalue->value->id) ) return true ;
+		if ( $curator->datavalue->value->id == 'Q5531047' ) return true ; # Curator: GeneDB, can be removed
+		return false ;
+	}
+
 
 	function getItemForGoTerm ( $go_term , $cache = [] ) {
 		if ( isset($this->go_term_cache[$go_term]) ) return $this->go_term_cache[$go_term] ;
