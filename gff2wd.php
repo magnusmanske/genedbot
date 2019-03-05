@@ -404,7 +404,7 @@ class GFF2WD {
 		$params = (object) [
 			'action' => 'wbeditentity' ,
 			'data' => json_encode($diff) ,
-			'summary' => 'Syncing to GeneDB (V2)' ,
+			'summary' => 'Syncing to GeneDB (V2) ' . $this->qs->getTemporaryBatchSummary() ,
 			'bot' => 1
 		] ;
 		if ( $gene_q == 'LAST' ) $params->new = 'item' ;
@@ -638,7 +638,7 @@ class GFF2WD {
 		$params = (object) [
 			'action' => 'wbeditentity' ,
 			'data' => json_encode($diff) ,
-			'summary' => 'Syncing to GeneDB (V2)' ,
+			'summary' => 'Syncing to GeneDB (V2) ' . $this->qs->getTemporaryBatchSummary() ,
 			'bot' => 1
 		] ;
 		if ( $protein_q == 'LAST' ) $params->new = 'item' ;
