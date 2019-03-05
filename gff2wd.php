@@ -40,6 +40,7 @@ class GFF2WD {
 		$this->tfc = new ToolforgeCommon ( 'genedb' ) ;
 #		$this->tfc->log_sparql_requests = true ; # TESTING
 		$this->qs = $this->tfc->getQS ( 'genedb' , __DIR__. '/bot.ini' , true ) ;
+		$this->qs->generateAndUseTemporaryBatchID() ;
 		$qs = $this->qs ;
 		$this->wil = new WikidataItemList () ;
 		$this->paper_editor = new PaperEditor ( $this->tfc , $this->qs , $this->wil ) ;
@@ -163,10 +164,11 @@ class GFF2WD {
 		$parent_q = $this->getParentTaxon ( $this->gffj->q ) ;
 		$species_list = [ $this->gffj->q ]  ;
 		if ( isset($parent_q) ) $species_list[] = $parent_q ;
-		$species_list = " VALUES ?species { wd:" . implode(' wd:', $species_list) . " } . " ;
+		$species_list = " VALUES ?species { wd:" . implode(' wd:', $species_list) . " } " ;
 
 		# All genes for this species with GeneDB ID
-		$sparql = "SELECT DISTINCT ?q ?genedb { {$species_list} ?q wdt:P31 wd:Q7187 ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
+		$gene_p31 = "VALUES ?gene_types { wd:Q7187 wd:" . implode ( ' wd:' , $this->alternate_gene_subclasses ) . " }" ;
+		$sparql = "SELECT DISTINCT ?q ?genedb { {$species_list} . {$gene_p31} . ?q wdt:P31 ?gene_types  ; wdt:P703 ?species ; wdt:P3382 ?genedb }" ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 //		if ( !isset($j->results) or !isset($j->results->bindings) or count($j->results->bindings) == 0 ) die ( "SPARQL loading of genes failed\n" ) ;
 		foreach ( $j->results->bindings AS $v ) {
