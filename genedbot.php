@@ -18,7 +18,7 @@ $found = false ;
 foreach ( $config AS $group => $entries ) {
 	foreach ( $entries AS $entry ) {
 		if ( $entry->abbreviation != $sk ) continue ;
-		if ( !isset($entry->q) ) die ( "Species {$sk} found in {$config_path}, but has no Wikidata item; add a 'q' value to the JSON object.\n" ) ;
+		if ( !isset($entry->wikidata_id) ) die ( "Species {$sk} found in {$config_path}, but has no Wikidata item; add a 'wikidata_id' value to the JSON object.\n" ) ;
 		$entry->file_root = $entry->abbreviation ; # Check if abbreviation is the correct one
 		$gff2wd->gffj = $entry ;
 		$found = true ;

@@ -46,6 +46,10 @@ class GFF2WD {
 		$this->paper_editor = new PaperEditor ( $this->tfc , $this->qs , $this->wil ) ;
 	}
 
+	function getSpeciesQ () {
+		return $this->gffj->wikidata_id ;
+	}
+
 	function createGenomicAssemblyForSpecies ( $species_q ) {
 		$this->wil->loadItems ( [$species_q] ) ;
 		$i = $this->wil->getItem ( $species_q ) ;
@@ -72,7 +76,7 @@ class GFF2WD {
 			return 'Q'.array_pop($qnums) ;
 		}
 		if ( count($items) == 0 ) { # No reference genome exists, create one
-			return $this->createGenomicAssemblyForSpecies ( $this->gffj->q ) ;
+			return $this->createGenomicAssemblyForSpecies ( $this->getSpeciesQ() ) ;
 		} else { # One reference genome exists, use that one
 			return $items[0] ;
 		}
@@ -80,11 +84,11 @@ class GFF2WD {
 	}
 
 	function ensureConfigComplete () {
-		if ( !isset($this->gffj->q) ) {
+		if ( null === $this->getSpeciesQ() ) {
 			die ( "No species item\n" ) ;
 		}
 		if ( !isset($this->gffj->genomic_assembly) ) {
-			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $this->gffj->q ) ;
+			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $this->getSpeciesQ() ) ;
 #			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
 		}
 	}
@@ -130,7 +134,7 @@ class GFF2WD {
 		$commands[] = 'CREATE' ;
 		$commands[] = "LAST\tLen\t\"{$chr}\"" ;
 		$commands[] = "LAST\tP31\tQ37748" ; # Chromosome
-		$commands[] = "LAST\tP703\t{$this->gffj->q}" ;
+		$commands[] = "LAST\tP703\t{$this->getSpeciesQ()}" ;
 		$q = $this->tfc->runCommandsQS ( $commands , $this->qs ) ;
 		if ( !isset($q) or $q == '' ) die ( "Could not create item for chromosome '{$chr}'\n" ) ;
 		$this->gffj->chr2q[$chr] = $q ;
@@ -147,8 +151,8 @@ class GFF2WD {
 
 	function loadBasicItems () {
 		# Load basic items (species, chromosomes)
-		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->gffj->q} }" ) ;
-		$items[] = $this->gffj->q ;
+		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->getSpeciesQ()} }" ) ;
+		$items[] = $this->getSpeciesQ() ;
 		$items[] = $this->tmhmm_q ;
 		$this->wil->loadItems ( $items ) ;
 		$this->gffj->chr2q = [] ;
@@ -161,8 +165,8 @@ class GFF2WD {
 		}
 
 		# Parent taxon? Used for rewriting species => strain, can be deactivated after
-		$parent_q = $this->getParentTaxon ( $this->gffj->q ) ;
-		$species_list = [ $this->gffj->q ]  ;
+		$parent_q = $this->getParentTaxon ( $this->getSpeciesQ() ) ;
+		$species_list = [ $this->getSpeciesQ() ]  ;
 		if ( isset($parent_q) ) $species_list[] = $parent_q ;
 		$species_list = " VALUES ?species { wd:" . implode(' wd:', $species_list) . " } " ;
 
@@ -175,7 +179,7 @@ class GFF2WD {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 			if ( !$this->isRealItem($q) ) continue ;
 			$genedb_id = $v->genedb->value ;
-			if ( isset($this->genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->gffj->q} for gene {$q} and {$this->genedb2q[$genedb_id]}\n" ) ;
+			if ( isset($this->genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->getSpeciesQ()} for gene {$q} and {$this->genedb2q[$genedb_id]}\n" ) ;
 			$this->genedb2q[$genedb_id] = $q ;
 		}
 
@@ -187,7 +191,7 @@ class GFF2WD {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 			if ( !$this->isRealItem($q) ) continue ;
 			$genedb_id = $v->genedb->value ;
-			if ( isset($this->protein_genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->gffj->q} for protein {$q} and {$this->protein_genedb2q[$genedb_id]}\n" ) ;
+			if ( isset($this->protein_genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->getSpeciesQ()} for protein {$q} and {$this->protein_genedb2q[$genedb_id]}\n" ) ;
 			$this->protein_genedb2q[$genedb_id] = $q ;
 		}
 
@@ -331,7 +335,7 @@ class GFF2WD {
 		$strand_q = $gene['strand'] == '+' ? 'Q22809680' : 'Q22809711' ;
 
 		$gene_i->addClaim ( $gene_i->newClaim('P31',$gene_i->newItem($types[1]) , [$refs] ) ) ; # Instance of
-		$gene_i->addClaim ( $gene_i->newClaim('P703',$gene_i->newItem($this->gffj->q) , [$refs] ) ) ; # Found in:Species
+		$gene_i->addClaim ( $gene_i->newClaim('P703',$gene_i->newItem($this->getSpeciesQ()) , [$refs] ) ) ; # Found in:Species
 		$gene_i->addClaim ( $gene_i->newClaim('P1057',$gene_i->newItem($chr_q) , [$refs] ) ) ; # Chromosome
 		$gene_i->addClaim ( $gene_i->newClaim('P2548',$gene_i->newItem($strand_q) , [$refs] , $ga_quals ) ) ; # Strand
 
@@ -504,7 +508,7 @@ class GFF2WD {
 
 		$protein_i->addClaim ( $protein_i->newClaim('P31',$protein_i->newItem('Q8054') , [$refs] ) ) ; # Instance of:protein
 		$protein_i->addClaim ( $protein_i->newClaim('P279',$protein_i->newItem('Q8054') , [$refs] ) ) ; # Subclass of:protein
-		$protein_i->addClaim ( $protein_i->newClaim('P703',$protein_i->newItem($this->gffj->q) , [$refs] ) ) ; # Found in:Species
+		$protein_i->addClaim ( $protein_i->newClaim('P703',$protein_i->newItem($this->getSpeciesQ()) , [$refs] ) ) ; # Found in:Species
 		if ( $gene_q != 'LAST' ) $protein_i->addClaim ( $protein_i->newClaim('P702',$protein_i->newItem($gene_q) , [$refs] ) ) ; # Encoded by:gene
 		$protein_i->addClaim ( $protein_i->newClaim('P3382',$protein_i->newString($genedb_id) , [$refs] ) ) ; # GeneDB ID
 
