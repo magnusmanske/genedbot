@@ -29,7 +29,7 @@ foreach ( $config AS $group => $entries ) {
 if ( !$found ) die ( "Species key {$sk} not found in {$config_path}\n" ) ;
 
 if ( isset($argv[2]) ) {
-#	$gff2wd->load_orth_data = false ; # DEBUG
+#$gff2wd->load_orth_data = false ; # DEBUG turn off in production
 	$gff2wd->init($argv[2]) ;
 } else {
 	$gff2wd->init() ;

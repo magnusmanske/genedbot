@@ -213,7 +213,7 @@ class GFF2WD {
 	}
 
 	function isRealItem ( $q ) { # Returns false if it's a redirect
-	return true ; # SHORTCUTTING
+		return true ; # SHORTCUTTING
 	}
 
 	function loadGAF () {
@@ -550,6 +550,7 @@ class GFF2WD {
 		}
 
 		if ( isset($this->go_annotation[$genedb_id]) ) {
+			$new_go_claims = [] ;
 			$goann = $this->go_annotation[$genedb_id] ;
 			foreach ( $goann AS $ga ) {
 				$go_q = $this->getItemForGoTerm ( $ga['go'] ) ;
@@ -563,18 +564,20 @@ class GFF2WD {
 				$evidence_code_q = $this->evidence_codes[$ga['evidence_code']] ;
 
 				$lit_sources = [] ;
-				$lit_id = $ga['db_ref'] ;
-				if ( $lit_id == 'WORKSHOP' ) continue ; // Huh
-				if ( preg_match('/^(.+?)\|/',$lit_id,$m) ) $lit_id = $m[1] ; # "1234|something" => "1234"
-				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
-				if ( isset($lit_q) ) {
-					$lit_sources[] = [ 'P248' , $protein_i->newItem($lit_q) ] ;
-				} else {
-					if ( preg_match ( '/^GO_REF:(\d+)$/' , $lit_id , $m ) ) {
-						$lit_sources[] = [ 'P854' , $protein_i->newString('https://github.com/geneontology/go-site/blob/master/metadata/gorefs/goref-'.$m[1].'.md') ] ;
-					} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
-						$lit_sources[] = [ 'P2926' , $protein_i->newString($m[1]) ] ;
+				$lit_ids = explode ( '|' , $ga['db_ref'] ) ;
+				foreach ( $lit_ids AS $lit_id ) {
+					if ( $lit_id == 'WORKSHOP' ) continue ; // Huh
+#					if ( preg_match('/^(.+?)\|/',$lit_id,$m) ) $lit_id = $m[1] ; # "1234|something" => "1234"
+					$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
+					if ( isset($lit_q) ) {
+						$lit_sources[] = [ 'P248' , $protein_i->newItem($lit_q) ] ;
 					} else {
+						if ( preg_match ( '/^GO_REF:(\d+)$/' , $lit_id , $m ) ) {
+							$lit_sources[] = [ 'P854' , $protein_i->newString('https://github.com/geneontology/go-site/blob/master/metadata/gorefs/goref-'.$m[1].'.md') ] ;
+						} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
+							$lit_sources[] = [ 'P2926' , $protein_i->newString($m[1]) ] ;
+						} else {
+						}
 					}
 				}
 
@@ -609,8 +612,18 @@ class GFF2WD {
 						$protein_i->newSnak ( 'P813' , $protein_i->today() )
 					] ;
 				}
-				$protein_i->addClaim ( $protein_i->newClaim($aspect_p,$protein_i->newItem($go_q) , $refs2 , $qualifiers ) ) ;
-				$literature[$lit_id] = 1 ;
+
+				$new_claim_key = json_encode([$aspect_p,$go_q,$qualifiers]) ;
+				if ( isset($new_go_claims[$new_claim_key]) ) { // Similar (identical?) claim exists, just add references
+					foreach ( $refs2 AS $ref ) {
+						$new_go_claims[$new_claim_key][2][] = $ref ;
+					}
+				} else {
+					$new_go_claims[$new_claim_key] = [$aspect_p,$protein_i->newItem($go_q),$refs2,$qualifiers] ;
+#					$protein_i->addClaim ( $new_claim ) ;
+				}
+
+				foreach ( $lit_ids AS $lit_id ) $literature[$lit_id] = 1 ;
 
 				if ( isset($ga['name']) and $label == $genedb_id ) {
 					$label = $ga['name'] ;
@@ -619,6 +632,10 @@ class GFF2WD {
 				foreach ( $ga['synonym'] AS $alias ) {
 					foreach ( explode(',',$this->fixAliasName($alias)) AS $v2 ) $protein_i->addAlias ( 'en' , $v2 ) ;
 				}
+			}
+			foreach ( $new_go_claims AS $claim_parts ) {
+				$new_claim = $protein_i->newClaim($claim_parts[0],$claim_parts[1],$claim_parts[2],$claim_parts[3]) ;
+				$protein_i->addClaim ( $new_claim ) ;
 			}
 		}
 
