@@ -80,7 +80,7 @@ class QuickStatements {
 */	
 
 	public function generateTemporaryBatchID () {
-		return '#temporary_batch_' . (round(microtime(true) * 1000)) ;
+		return preg_replace('/[^0-9a-f]/','',uniqid('',true));#'#temporary_batch_' . (round(microtime(true) * 1000)) ;
 	}
 
 	public function generateAndUseTemporaryBatchID () {
@@ -992,6 +992,10 @@ exit ( 1 ) ; // Force bot restart
 		}
 		$this->is_batch_run = false ;
 	}
+
+	public function getTemporaryBatchSummary () {
+		return "[[:toollabs:editgroups/b/CB/{$this->temporary_batch_id}|details]]" ;
+	}
 	
 	public function runSingleCommand ( $command ) {
 		if ( $this->sleep != 0 ) sleep ( $this->sleep ) ;
@@ -999,8 +1003,8 @@ exit ( 1 ) ; // Force bot restart
 		$command->status = 'working' ;
 		if ( isset($command->error) ) unset ( $command->error ) ;
 		if ( isset($this->temporary_batch_id) ) {
-			if ( isset($command->summary) ) $command->summary .= ' ' . $this->temporary_batch_id ;
-			else $command->summary = $this->temporary_batch_id ;
+			if ( isset($command->summary) ) $command->summary .= ' ' . $this->getTemporaryBatchSummary() ;
+			else $command->summary = $this->getTemporaryBatchSummary() ;
 		}
 
 		if ( $command->action == 'create' ) {

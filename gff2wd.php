@@ -84,12 +84,12 @@ class GFF2WD {
 	}
 
 	function ensureConfigComplete () {
-		if ( null === $this->getSpeciesQ() ) {
+		$species_q = $this->getSpeciesQ() ;
+		if ( !isset($species_q) or null === $species_q ) {
 			die ( "No species item\n" ) ;
 		}
 		if ( !isset($this->gffj->genomic_assembly) ) {
-			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $this->getSpeciesQ() ) ;
-#			print "Using genomic assembly {$this->gffj->genomic_assembly}\n" ;
+			$this->gffj->genomic_assembly = $this->getGenomicAssemblyForSpecies ( $species_q ) ;
 		}
 	}
 
@@ -121,7 +121,7 @@ class GFF2WD {
 			return $gaf_filename ;
 		} else { # DEFAULT: FTP
 			$root = $this->gffj->file_root ;
-			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/{$root}/{$root}.gaf.gz" ;
+			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/{$root}/{$root}.gaf" ; # .gz
 #			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/" . $this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
 		}
 	}
@@ -134,7 +134,7 @@ class GFF2WD {
 		$commands[] = 'CREATE' ;
 		$commands[] = "LAST\tLen\t\"{$chr}\"" ;
 		$commands[] = "LAST\tP31\tQ37748" ; # Chromosome
-		$commands[] = "LAST\tP703\t{$this->getSpeciesQ()}" ;
+		$commands[] = "LAST\tP703\t" . $this->getSpeciesQ() ;
 		$q = $this->tfc->runCommandsQS ( $commands , $this->qs ) ;
 		if ( !isset($q) or $q == '' ) die ( "Could not create item for chromosome '{$chr}'\n" ) ;
 		$this->gffj->chr2q[$chr] = $q ;
@@ -151,7 +151,7 @@ class GFF2WD {
 
 	function loadBasicItems () {
 		# Load basic items (species, chromosomes)
-		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:{$this->getSpeciesQ()} }" ) ;
+		$items = $this->tfc->getSPARQLitems ( "SELECT ?q { ?q wdt:P31 wd:Q37748 ; wdt:P703 wd:" . $this->getSpeciesQ() . " }" ) ;
 		$items[] = $this->getSpeciesQ() ;
 		$items[] = $this->tmhmm_q ;
 		$this->wil->loadItems ( $items ) ;
@@ -179,7 +179,7 @@ class GFF2WD {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 			if ( !$this->isRealItem($q) ) continue ;
 			$genedb_id = $v->genedb->value ;
-			if ( isset($this->genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->getSpeciesQ()} for gene {$q} and {$this->genedb2q[$genedb_id]}\n" ) ;
+			if ( isset($this->genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species " . $this->getSpeciesQ() . " for gene {$q} and {$this->genedb2q[$genedb_id]}\n" ) ;
 			$this->genedb2q[$genedb_id] = $q ;
 		}
 
@@ -191,7 +191,7 @@ class GFF2WD {
 			$q = $this->tfc->parseItemFromURL ( $v->q->value ) ;
 			if ( !$this->isRealItem($q) ) continue ;
 			$genedb_id = $v->genedb->value ;
-			if ( isset($this->protein_genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species {$this->getSpeciesQ()} for protein {$q} and {$this->protein_genedb2q[$genedb_id]}\n" ) ;
+			if ( isset($this->protein_genedb2q[$genedb_id]) ) die ( "Double genedb {$genedb_id} in species " . $this->getSpeciesQ() . " for protein {$q} and {$this->protein_genedb2q[$genedb_id]}\n" ) ;
 			$this->protein_genedb2q[$genedb_id] = $q ;
 		}
 
@@ -219,18 +219,23 @@ class GFF2WD {
 	function loadGAF () {
 		$gaf_filename = $this->computeFilenameGAF() ;
 		$gaf = new GAF ( $gaf_filename ) ;
+		$cnt = 0 ;
 		while ( $r = $gaf->nextEntry() ) {
 			if ( isset($r['header'] ) ) continue ;
 			$this->go_annotation[$r['id']][] = $r ;
+			$cnt++ ;
 		}
+		if ( $cnt == 0 ) die ( "No/empty GAF file: {$gaf_filename}\n" ) ;
 	}
 
 	function loadGFF () {
 		$gff_filename = $this->computeFilenameGFF() ;
 		$gff = new GFF ( $gff_filename ) ;
 		$orth_ids = [] ;
+		$cnt = 0 ;
 		while ( $r = $gff->nextEntry() ) {
 			if ( isset($r['comment']) ) continue ;
+			$cnt++ ;
 			if ( !in_array ( $r['type'] , ['gene','mRNA','pseudogene'] ) ) {
 				if ( isset($r['attributes']) and isset($r['attributes']['ID']) ) {
 					$id = $r['attributes']['ID'] ;
@@ -254,6 +259,7 @@ class GFF2WD {
 				}
 			}
 		}
+		if ( $cnt == 0 ) die ( "No/empty GFF file: {$gff_filename}\n" ) ;
 
 		# Orthologs cache
 		$orth_chunks = array_chunk ( array_keys($orth_ids) , 100 ) ;
@@ -556,18 +562,18 @@ class GFF2WD {
 				if ( !isset($this->evidence_codes[$ga['evidence_code']]) ) continue ;
 				$evidence_code_q = $this->evidence_codes[$ga['evidence_code']] ;
 
-				$lit_source = [] ;
+				$lit_sources = [] ;
 				$lit_id = $ga['db_ref'] ;
 				if ( $lit_id == 'WORKSHOP' ) continue ; // Huh
 				if ( preg_match('/^(.+?)\|/',$lit_id,$m) ) $lit_id = $m[1] ; # "1234|something" => "1234"
 				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
 				if ( isset($lit_q) ) {
-					$lit_source = [ 'P248' , $protein_i->newItem($lit_q) ] ;
+					$lit_sources[] = [ 'P248' , $protein_i->newItem($lit_q) ] ;
 				} else {
 					if ( preg_match ( '/^GO_REF:(\d+)$/' , $lit_id , $m ) ) {
-						$lit_source = [ 'P854' , $protein_i->newString('https://github.com/geneontology/go-site/blob/master/metadata/gorefs/goref-'.$m[1].'.md') ] ;
+						$lit_sources[] = [ 'P854' , $protein_i->newString('https://github.com/geneontology/go-site/blob/master/metadata/gorefs/goref-'.$m[1].'.md') ] ;
 					} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
-						$lit_source = [ 'P2926' , $protein_i->newString($m[1]) ] ;
+						$lit_sources[] = [ 'P2926' , $protein_i->newString($m[1]) ] ;
 					} else {
 					}
 				}
@@ -584,6 +590,8 @@ class GFF2WD {
 				if ( isset($ga['with_from']) ) {
 					if ( preg_match ( '/^Pfam:(.+)$/' , $ga['with_from'] , $m ) ) {
 						$qualifiers[] = $protein_i->newSnak ( 'P3519' , $protein_i->newString($m[1]) ) ;
+					} else if ( preg_match ( '/^GeneDB:(.+)$/' , $ga['with_from'] , $m ) ) {
+						$qualifiers[] = $protein_i->newSnak ( 'P3382' , $protein_i->newString($m[1]) ) ;
 					} else if ( preg_match ( '/^UniProt:(.+)$/' , $ga['with_from'] , $m ) ) {
 						$qualifiers[] = $protein_i->newSnak ( 'P352' , $protein_i->newString($m[1]) ) ;
 					} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
@@ -594,11 +602,13 @@ class GFF2WD {
 				}
 
 				$refs2 = [] ;
-				if ( count($lit_source) > 0 ) $refs2[] = [
-					$protein_i->newSnak ( $lit_source[0] , $lit_source[1] ) ,
-					$protein_i->newSnak ( 'P1640' , $protein_i->newItem('Q5531047') ) ,
-					$protein_i->newSnak ( 'P813' , $protein_i->today() )
-				] ;
+				foreach ( $lit_sources AS $lit_source ) {
+					$refs2[] = [
+						$protein_i->newSnak ( $lit_source[0] , $lit_source[1] ) ,
+						$protein_i->newSnak ( 'P1640' , $protein_i->newItem('Q5531047') ) ,
+						$protein_i->newSnak ( 'P813' , $protein_i->today() )
+					] ;
+				}
 				$protein_i->addClaim ( $protein_i->newClaim($aspect_p,$protein_i->newItem($go_q) , $refs2 , $qualifiers ) ) ;
 				$literature[$lit_id] = 1 ;
 
