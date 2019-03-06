@@ -15,7 +15,7 @@ $hour = 3 ;
 $config = json_decode (file_get_contents ( $config_path ) ) ;
 foreach ( $config AS $group => $entries ) {
 	foreach ( $entries AS $entry ) {
-		if ( !isset($entry->q) ) continue ;
+		if ( !isset($entry->wikidata_id) ) continue ;
 		$hour++ ;
 		if ( $hour > 23 ) {
 			$hour = 0 ;
