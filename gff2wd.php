@@ -329,6 +329,10 @@ class GFF2WD {
 			foreach ( explode(',',$this->fixAliasName($gene['attributes']['synonym'])) AS $v2 ) $gene_i->addAlias ( 'en' , $v2 ) ;
 		}
 
+		if ( isset($gene['attributes']['alias']) ) {
+			foreach ( explode(',',$this->fixAliasName($gene['attributes']['alias'])) AS $v2 ) $gene_i->addAlias ( 'en' , $v2 ) ;
+		}
+
 		# Statements
 		$refs = [
 			$gene_i->newSnak ( 'P248' , $gene_i->newItem('Q5531047') ) ,
