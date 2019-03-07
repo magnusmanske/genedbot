@@ -502,20 +502,27 @@ class GFF2WD {
 		$genedb_id = $protein['attributes']['ID'] ;
 		$label = $genedb_id ;
 		$desc = '' ;
-		$literature = [] ;
 
-		if ( isset($protein['attributes']['literature']) ) {
-			foreach ( $protein['attributes']['literature'] AS $lit_id ) $literature[$lit_id] = 1 ;
-		}
-
+		# Item, as it should be
 		$protein_i = new BlankWikidataItem ;
 
-		# Claims
+		# References
 		$refs = [
 			$protein_i->newSnak ( 'P248' , $protein_i->newItem('Q5531047') ) ,
 			$protein_i->newSnak ( 'P813' , $protein_i->today() )
 		] ;
 
+		$literature = [] ;
+		if ( isset($protein['attributes']['literature']) ) {
+			foreach ( $protein['attributes']['literature'] AS $lit_id ) {
+				$literature[$lit_id] = 1 ;
+				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
+				if ( !isset($lit_q) ) continue ; # Can't find/create an item for that literature reference
+				$protein_i->addClaim ( $protein_i->newClaim('P1343',$protein_i->newItem($lit_q) , [$refs] ) ) ; # Described by source
+			}
+		}
+
+		# Claims
 		$protein_i->addClaim ( $protein_i->newClaim('P31',$protein_i->newItem('Q8054') , [$refs] ) ) ; # Instance of:protein
 		$protein_i->addClaim ( $protein_i->newClaim('P279',$protein_i->newItem('Q8054') , [$refs] ) ) ; # Subclass of:protein
 		$protein_i->addClaim ( $protein_i->newClaim('P703',$protein_i->newItem($this->getSpeciesQ()) , [$refs] ) ) ; # Found in:Species
