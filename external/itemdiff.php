@@ -197,6 +197,9 @@ class BlankWikidataItem {
 
 	private function qualifiersMatch ( $claim1 , $claim2 , $options ) {
 		if ( !isset($claim1->qualifiers) and !isset($claim2->qualifiers) ) return true ;
+		if ( isset($claim1->mainsnak->property) and isset($options['ignore_qualifiers']) and in_array($claim1->mainsnak->property,$options['ignore_qualifiers']) ) {
+			return true ;
+		}
 		foreach ( $claim1->qualifiers AS $k => $v1 ) {
 			if ( !isset($claim2->qualifiers->$k) ) return false ;
 			$v2 = $claim2->qualifiers->$k ;

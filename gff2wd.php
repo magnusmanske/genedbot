@@ -23,6 +23,7 @@ class GFF2WD {
 	var $aspects = [ 'P' => 'P682' , 'F' => 'P680' , 'C' => 'P681' ] ;
 	var $tmhmm_q = 'Q61895944' ;
 	var $evidence_codes = [] ;
+	var $evidence_codes_labels = [] ;
 	var $sparql_result_cache = [] ;
 	var $paper_editor ;
 	var $other_types = [] ;
@@ -196,11 +197,13 @@ class GFF2WD {
 		}
 
 		# Evidence codes
-		$sparql = 'SELECT DISTINCT ?q ?qLabel { ?q wdt:P31 wd:Q23173209 SERVICE wikibase:label { bd:serviceParam wikibase:language "en" } }' ;
+		$sparql = 'SELECT DISTINCT ?q ?qLabel ?qAltLabel { ?q wdt:P31 wd:Q23173209 SERVICE wikibase:label { bd:serviceParam wikibase:language "en" } }' ;
 		$j = $this->tfc->getSPARQL ( $sparql ) ;
 		foreach ( $j->results->bindings AS $b ) {
 			$label = $b->qLabel->value ;
+			$alt_label = $b->qAltLabel->value ;
 			$eq = $this->tfc->parseItemFromURL ( $b->q->value ) ;
+			$this->evidence_codes_labels[$this->normalizeEvidenceLabel($alt_label)] = $eq ;
 			$this->evidence_codes[$label] = $eq ;
 		}
 
@@ -210,6 +213,10 @@ class GFF2WD {
 			array_values($this->evidence_codes)
 		) ;
 		$this->wil->loadItems ( $to_load ) ; # TODO turn on
+	}
+
+	function normalizeEvidenceLabel ( $s ) {
+		return trim ( strtolower ( $s ) ) ;
 	}
 
 	function isRealItem ( $q ) { # Returns false if it's a redirect
@@ -516,9 +523,11 @@ class GFF2WD {
 		if ( isset($protein['attributes']['literature']) ) {
 			foreach ( $protein['attributes']['literature'] AS $lit_id ) {
 				$literature[$lit_id] = 1 ;
+/*
 				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
 				if ( !isset($lit_q) ) continue ; # Can't find/create an item for that literature reference
 				$protein_i->addClaim ( $protein_i->newClaim('P1343',$protein_i->newItem($lit_q) , [$refs] ) ) ; # Described by source
+*/
 			}
 		}
 
@@ -546,7 +555,10 @@ class GFF2WD {
 		}
 
 		if ( isset($protein['attributes']) and isset($protein['attributes']['product']) and is_array($protein['attributes']['product']) ) {
-			foreach ( $protein['attributes']['product'] AS $v ) {
+			$ap = $protein['attributes']['product'] ;
+			$apk = [] ;
+			foreach ( $ap AS $v ) {
+				if ( preg_match ( '/^(.+?)=(.+)$/' , $v , $m ) ) $apk[$m[1]] = $m[2] ;
 				if ( preg_match ( '/^term=(.+)$/' , $v , $m ) ) {
 					if ( $label == $genedb_id ) {
 						$label = $m[1] ;
@@ -556,6 +568,35 @@ class GFF2WD {
 					}
 				} else if ( preg_match ( '/^with=InterPro:(.+)$/' , $v , $m ) ) {
 #					$protein_i->addClaim ( $protein_i->newClaim('P2926',$protein_i->newString($m[1]) , [$refs] ) ) ; # Deactivated; applies to family?
+				}
+			}
+
+			if ( isset($apk['db_xref']) and preg_match ( '/^PMID:/',$apk['db_xref']) ) {
+				$lit_id = $apk['db_xref'] ;
+				$literature[$lit_id] = 1 ;
+				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
+				if ( isset($lit_q) ) {
+					$refs2 = [
+						$protein_i->newSnak ( 'P1640' , $protein_i->newItem('Q5531047') ) ,
+						$protein_i->newSnak ( 'P813' , $protein_i->today() )
+					] ;
+					$qualifiers = [] ;
+
+					if ( isset($apk['evidence']) ) {
+						$ecq = $this->evidence_codes_labels[$this->normalizeEvidenceLabel($apk['evidence'])] ;
+						if ( isset($ecq) ) {
+							$qualifiers[] = $protein_i->newSnak ( 'P459' , $protein_i->newItem($ecq) ) ;
+						}
+					}
+					if ( isset($apk['term']) ) {
+						$qualifiers[] = $protein_i->newSnak ( 'P1810' , $protein_i->newString($apk['term']) ) ;
+					}
+					if ( isset($apk['with']) ) {
+						$qualifier = $this->getWithFromQualifier ( $apk['with'] , $protein_i ) ;
+						if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
+					}
+
+					$protein_i->addClaim ( $protein_i->newClaim('P1343',$protein_i->newItem($lit_q) , [$refs2] , $qualifiers ) ) ; # Described by source
 				}
 			}
 		}
@@ -602,17 +643,8 @@ class GFF2WD {
 
 				// The with/from annotation can either be a UniProt link, a GeneDB link, InterPro ID, Pfam ID or a link to TMHMM.
 				if ( isset($ga['with_from']) ) {
-					if ( preg_match ( '/^Pfam:(.+)$/' , $ga['with_from'] , $m ) ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P3519' , $protein_i->newString($m[1]) ) ;
-					} else if ( preg_match ( '/^GeneDB:(.+)$/' , $ga['with_from'] , $m ) ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P3382' , $protein_i->newString($m[1]) ) ;
-					} else if ( preg_match ( '/^UniProt:(.+)$/' , $ga['with_from'] , $m ) ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P352' , $protein_i->newString($m[1]) ) ;
-					} else if ( preg_match ( '/^InterPro:(.+)$/' , $ga['with_from'] , $m ) ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P2926' , $protein_i->newString($m[1]) ) ;
-					} else if ( $ga['with_from'] == 'CBS:TMHMM' ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P2283' , $protein_i->newItem($this->tmhmm_q) ) ;
-					}
+					$qualifier = $this->getWithFromQualifier ( $ga['with_from'] , $protein_i ) ;
+					if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
 				}
 
 				$refs2 = [] ;
@@ -668,7 +700,9 @@ class GFF2WD {
 			'labels' => [ 'ignore_except'=>['en'] ] ,
 			'descriptions' => [ 'ignore_except'=>['en'] ] ,
 			'aliases' => [ 'ignore_except'=>['en'] ] ,
+#			'ignore_qualifiers' => ['P1640'] ,
 			'remove_only' => [
+				'P1343', // Decribed by source; CAREFUL!
 				'P703', // Found in taxon
 				'P680',
 				'P681',
@@ -717,6 +751,20 @@ class GFF2WD {
 		$this->tfc->runCommandsQS ( $commands , $this->qs ) ;
 
 		return $protein_q ;
+	}
+
+	function getWithFromQualifier ( $with_from , &$protein_i ) {
+		if ( preg_match ( '/^Pfam:(.+)$/' , $with_from , $m ) ) {
+			return $protein_i->newSnak ( 'P3519' , $protein_i->newString($m[1]) ) ;
+		} else if ( preg_match ( '/^GeneDB:(.+)$/' , $with_from , $m ) ) {
+			return $protein_i->newSnak ( 'P3382' , $protein_i->newString($m[1]) ) ;
+		} else if ( preg_match ( '/^UniProt:(.+)$/' , $with_from , $m ) ) {
+			return $protein_i->newSnak ( 'P352' , $protein_i->newString($m[1]) ) ;
+		} else if ( preg_match ( '/^InterPro:(.+)$/' , $with_from , $m ) ) {
+			return $protein_i->newSnak ( 'P2926' , $protein_i->newString($m[1]) ) ;
+		} else if ( $with_from == 'CBS:TMHMM' ) {
+			return $protein_i->newSnak ( 'P2283' , $protein_i->newItem($this->tmhmm_q) ) ;
+		}
 	}
 
 	function proteinEditValidator ( $type , $action ,  &$old_item  , &$new_item ) {
