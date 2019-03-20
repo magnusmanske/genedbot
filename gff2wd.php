@@ -571,33 +571,44 @@ class GFF2WD {
 				}
 			}
 
-			if ( isset($apk['db_xref']) and preg_match ( '/^PMID:/',$apk['db_xref']) ) {
-				$lit_id = $apk['db_xref'] ;
-				$literature[$lit_id] = 1 ;
-				$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
-				if ( isset($lit_q) ) {
-					$refs2 = [
-						$protein_i->newSnak ( 'P1640' , $protein_i->newItem('Q5531047') ) ,
-						$protein_i->newSnak ( 'P813' , $protein_i->today() )
-					] ;
-					$qualifiers = [] ;
+			
+			if ( isset($apk['evidence']) ) {
+				$refs2 = [
+					$protein_i->newSnak ( 'P1640' , $protein_i->newItem('Q5531047') ) ,
+					$protein_i->newSnak ( 'P813' , $protein_i->today() )
+				] ;
+				$qualifiers = [] ;
 
-					if ( isset($apk['evidence']) ) {
-						$ecq = $this->evidence_codes_labels[$this->normalizeEvidenceLabel($apk['evidence'])] ;
-						if ( isset($ecq) ) {
-							$qualifiers[] = $protein_i->newSnak ( 'P459' , $protein_i->newItem($ecq) ) ;
-						}
+				if ( isset($apk['evidence']) ) {
+					$ecq = $this->evidence_codes_labels[$this->normalizeEvidenceLabel($apk['evidence'])] ;
+					if ( isset($ecq) ) {
+						$qualifiers[] = $protein_i->newSnak ( 'P459' , $protein_i->newItem($ecq) ) ;
 					}
-					if ( isset($apk['term']) ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P1810' , $protein_i->newString($apk['term']) ) ;
-					}
-					if ( isset($apk['with']) ) {
-						$qualifier = $this->getWithFromQualifier ( $apk['with'] , $protein_i ) ;
+				}
+				if ( isset($apk['term']) ) {
+					$qualifiers[] = $protein_i->newSnak ( 'P1810' , $protein_i->newString($apk['term']) ) ;
+				}
+				if ( isset($apk['with']) ) {
+					$with_from_parts = explode ( '|' , $apk['with'] ) ;
+					foreach ( $with_from_parts AS $part ) {
+						$qualifier = $this->getWithFromQualifier ( $part , $protein_i ) ;
 						if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
 					}
-
-					$protein_i->addClaim ( $protein_i->newClaim('P1343',$protein_i->newItem($lit_q) , [$refs2] , $qualifiers ) ) ; # Described by source
 				}
+
+				$lit_q = '' ;
+				if ( isset($apk['db_xref']) and preg_match ( '/^PMID:/',$apk['db_xref']) ) {
+					$lit_id = $apk['db_xref'] ;
+					$literature[$lit_id] = 1 ;
+					$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
+				}
+
+				if ( isset($lit_q) and $lit_q != '' ) {
+					$protein_i->addClaim ( $protein_i->newClaim('P1343',$protein_i->newItem($lit_q) , [$refs2] , $qualifiers ) ) ; # Described by source
+				} else {
+					$protein_i->addClaim ( $protein_i->newSomevalue('P1343', [$refs2] , $qualifiers ) ) ; # Described by source:somevalue
+				}
+
 			}
 		}
 
@@ -643,8 +654,11 @@ class GFF2WD {
 
 				// The with/from annotation can either be a UniProt link, a GeneDB link, InterPro ID, Pfam ID or a link to TMHMM.
 				if ( isset($ga['with_from']) ) {
-					$qualifier = $this->getWithFromQualifier ( $ga['with_from'] , $protein_i ) ;
-					if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
+					$with_from_parts = explode ( '|' , $ga['with_from'] ) ;
+					foreach ( $with_from_parts AS $part ) {
+						$qualifier = $this->getWithFromQualifier ( $part , $protein_i ) ;
+						if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
+					}
 				}
 
 				$refs2 = [] ;
@@ -704,6 +718,10 @@ class GFF2WD {
 			'remove_only' => [
 				'P1343', // Decribed by source; CAREFUL!
 				'P703', // Found in taxon
+				'P1057', // Chromosome
+				'P2548', // Strand orientation
+				'P644', // Genomic start
+				'P645', // Genomic end
 				'P680',
 				'P681',
 				'P682'
@@ -762,6 +780,9 @@ class GFF2WD {
 			return $protein_i->newSnak ( 'P352' , $protein_i->newString($m[1]) ) ;
 		} else if ( preg_match ( '/^InterPro:(.+)$/' , $with_from , $m ) ) {
 			return $protein_i->newSnak ( 'P2926' , $protein_i->newString($m[1]) ) ;
+		} else if ( preg_match ( '/^PANTHER:(.+)$/' , $with_from , $m ) ) {
+			$url = 'http://www.pantherdb.org/panther/family.do?clsAccession=' . $m[1] ;
+			return $protein_i->newSnak ( 'P973' , $protein_i->newString($url) ) ;
 		} else if ( $with_from == 'CBS:TMHMM' ) {
 			return $protein_i->newSnak ( 'P2283' , $protein_i->newItem($this->tmhmm_q) ) ;
 		}

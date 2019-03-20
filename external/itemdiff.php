@@ -61,9 +61,43 @@ class BlankWikidataItem {
 		$ret = (object) [
 			'snaktype' => $snaktype ,
 			'property' => $property ,
-			'datavalue' => $datavalue ,
 			'datatype' => $this->getDatatype ( $property )
 		] ;
+		if ( $snaktype == 'value' ) $ret->datavalue = $datavalue ;
+		return $ret ;
+	}
+
+	private function addReferencesToClaim ( &$claim , $references ) {
+		if ( count($references) > 0 ) {
+			$claim->references = [] ;
+			foreach ( $references AS $r ) {
+				if ( is_array($r) ) $r = $this->formatReference ( $r ) ;
+				$claim->references[] = $r ;
+			}
+		}
+	}
+
+	private function addQualifiersToClaim ( &$claim , $qualifiers ) {
+		if ( is_object($qualifiers) and count($qualifiers) > 0 ) { # Qualifiers as object
+			$claim->qualifiers = $qualifiers ;
+		} else if ( is_array($qualifiers) and count($qualifiers) > 0 ) { # Qualifiers as array (easier to build)
+			$claim->qualifiers = (object) [] ;
+			foreach ( $qualifiers AS $qualifier ) {
+				$p = $qualifier->property ;
+				if ( !isset($claim->qualifiers->$p) ) $claim->qualifiers->$p = [] ;
+				array_push ( $claim->qualifiers->$p , $qualifier ) ;
+			}
+		}
+	}
+
+	public function newSomevalue ( $property , $references = [] , $qualifiers = [] ) {
+		$ret = (object) [
+			'mainsnak' => $this->newSnak ( $property , '' , 'somevalue' ) ,
+			'type' => 'statement' ,
+			'rank' => 'normal'
+		] ;
+		$this->addReferencesToClaim ( $ret , $references ) ;
+		$this->addQualifiersToClaim ( $ret , $qualifiers ) ;
 		return $ret ;
 	}
 
@@ -73,24 +107,8 @@ class BlankWikidataItem {
 			'type' => 'statement' ,
 			'rank' => 'normal'
 		] ;
-#		$ret->hash = md5 ( serialize ( $ret->mainsnak ) ) ;
-		if ( count($references) > 0 ) {
-			$ret->references = [] ;
-			foreach ( $references AS $r ) {
-				if ( is_array($r) ) $r = $this->formatReference ( $r ) ;
-				$ret->references[] = $r ;
-			}
-		}
-		if ( is_object($qualifiers) and count($qualifiers) > 0 ) { # Qualifiers as object
-			$ret->qualifiers = $qualifiers ;
-		} else if ( is_array($qualifiers) and count($qualifiers) > 0 ) { # Qualifiers as array (easier to build)
-			$ret->qualifiers = (object) [] ;
-			foreach ( $qualifiers AS $qualifier ) {
-				$p = $qualifier->property ;
-				if ( !isset($ret->qualifiers->$p) ) $ret->qualifiers->$p = [] ;
-				array_push ( $ret->qualifiers->$p , $qualifier ) ;
-			}
-		}
+		$this->addReferencesToClaim ( $ret , $references ) ;
+		$this->addQualifiersToClaim ( $ret , $qualifiers ) ;
 		return $ret ;
 	}
 
