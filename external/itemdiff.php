@@ -194,6 +194,7 @@ class BlankWikidataItem {
 			if ( !isset($snak1->$k) and isset($snak2->$k) ) return false ;
 			if ( $snak1->$k != $snak2->$k ) return false ;
 		}
+		if ( $snak1->snaktype == 'somevalue' ) return true ; # Both of them
 		if ( !isset($snak1->datavalue) or !isset($snak2->datavalue) ) return false ; # Can't compare those?
 		if ( $snak1->datavalue->type != $snak2->datavalue->type ) return false ;
 		if ( is_string($snak1->datavalue->value) and is_string($snak2->datavalue->value) ) {

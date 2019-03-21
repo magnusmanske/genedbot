@@ -35,6 +35,12 @@ class GFF2WD {
 		'ncRNA' => 'Q427087' ,
 		'snRNA' => 'Q284578' ,
 	] ;
+	var $xref2prop = [
+		'UniProtKB' => 'P352',
+//		'Rfam' => 'P3523' ,
+//		'Pfam' => 'P3519'
+	] ;
+
 
 	function __construct () {
 		global $qs ;
@@ -248,10 +254,14 @@ class GFF2WD {
 					$id = $r['attributes']['ID'] ;
 					$id = preg_replace ( '/:.*$/' , '' , $id ) ;
 					$id = preg_replace ( '/\.\d$/' , '' , $id ) ;
-					$this->other_types[$r['type']][$id] = 1 ;
+					$type = $r['type'] ;
+					if ( isset($this->alternate_gene_subclasses[$type]) ) $this->other_types[$type][$id] = $r ;
+					else $this->other_types[$type][$id] = 1 ;
 					if ( isset($r['attributes']['Parent']) ) {
 						$parent_id = $r['attributes']['Parent'] ;
-						$this->other_types[$r['type']][$parent_id] = 1 ;
+						if ( isset($this->alternate_gene_subclasses[$type]) ) $this->other_types[$type][$parent_id] = $r ;
+						else $this->other_types[$type][$parent_id] = 1 ;
+//						$this->other_types[$r['type']][$parent_id] = 2 ;
 					}
 
 				}
@@ -376,11 +386,15 @@ class GFF2WD {
 				if ( !isset($this->other_types[$k]) ) continue ;
 				if ( !isset($this->other_types[$k][$genedb_id]) ) continue ;
 				$gene_i->addClaim ( $gene_i->newClaim('P279',$gene_i->newItem($v) , [$refs] ) ) ;
+				if ( is_array($this->other_types[$k][$genedb_id]) ) { # Evidence codes
+					$literature = [] ; # Dummy
+					$this->processProduct ( $this->other_types[$k][$genedb_id] , $gene_i , $literature , $genedb_id , $refs ) ;
+				}
 				$found = true ;
 				break ;
 			}
 			if ( !$found ) {
-				print "No subclass found for {$genedb_id}\n" ;
+				print "No subclass found for gene {$genedb_id}\n" ;
 			}
 		}
 
@@ -504,6 +518,82 @@ class GFF2WD {
 		return $ret ;
 	}
 
+	function setEvidence ( $apk , &$item , &$literature ) {
+		if ( !isset($apk['evidence']) ) return ;
+
+		$refs2 = [
+			$item->newSnak ( 'P1640' , $item->newItem('Q5531047') ) ,
+			$item->newSnak ( 'P813' , $item->today() )
+		] ;
+		$qualifiers = [] ;
+
+		if ( isset($apk['evidence']) ) {
+			$ecq = $this->evidence_codes_labels[$this->normalizeEvidenceLabel($apk['evidence'])] ;
+			if ( isset($ecq) ) {
+				$qualifiers[] = $item->newSnak ( 'P459' , $item->newItem($ecq) ) ;
+			}
+		}
+		if ( isset($apk['term']) ) {
+			$qualifiers[] = $item->newSnak ( 'P1810' , $item->newString($apk['term']) ) ;
+		}
+		if ( isset($apk['with']) ) {
+			$with_from_parts = explode ( '|' , $apk['with'] ) ;
+			foreach ( $with_from_parts AS $part ) {
+				$qualifier = $this->getWithFromQualifier ( $part , $item ) ;
+				if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
+			}
+		}
+
+		$lit_q = '' ;
+		if ( isset($apk['db_xref']) and preg_match ( '/^PMID:/',$apk['db_xref']) ) {
+			$lit_id = $apk['db_xref'] ;
+			$literature[$lit_id] = 1 ;
+			$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
+		}
+
+		if ( isset($lit_q) and $lit_q != '' ) {
+			$item->addClaim ( $item->newClaim('P1343',$item->newItem($lit_q) , [$refs2] , $qualifiers ) ) ; # Described by source
+		} else {
+			$item->addClaim ( $item->newSomevalue('P1343', [$refs2] , $qualifiers ) ) ; # Described by source:somevalue
+		}
+	}
+
+	function processProduct ( $data , &$item , &$literature , $genedb_id , $refs ) {
+		if ( isset($data['attributes']) and isset($data['attributes']['Dbxref']) ) {
+			foreach ( $data['attributes']['Dbxref'] AS $xref ) {
+				$xref = explode ( ':' , $xref , 2 ) ;
+				$key = trim($xref[0]) ;
+				$value = trim($xref[1]) ;
+				if ( !isset($this->xref2prop[$key]) ) continue ;
+				$prop = $this->xref2prop[$key] ;
+				$item->addClaim ( $item->newClaim($prop,$item->newString($value) , [$refs] ) ) ;
+			}
+		}
+
+
+
+		if ( !isset($data['attributes']) ) return ;
+		if ( !isset($data['attributes']['product']) ) return ;
+		if ( !is_array($data['attributes']['product']) ) return ;
+
+		$ap = $data['attributes']['product'] ;
+		$apk = [] ;
+		foreach ( $ap AS $v ) {
+			if ( preg_match ( '/^(.+?)=(.+)$/' , $v , $m ) ) $apk[$m[1]] = $m[2] ;
+			if ( preg_match ( '/^term=(.+)$/' , $v , $m ) ) {
+				if ( $label == $genedb_id ) {
+					$label = $m[1] ;
+					$item->addAlias ( 'en' , $genedb_id ) ;
+				} else {
+					$item->addAlias ( 'en' , $m[1] ) ;
+				}
+			} else if ( preg_match ( '/^with=InterPro:(.+)$/' , $v , $m ) ) {
+#					$item->addClaim ( $item->newClaim('P2926',$item->newString($m[1]) , [$refs] ) ) ; # Deactivated; applies to family?
+			}
+		}
+		$this->setEvidence ( $apk , $item , $literature ) ;
+	}
+
 	# This returns the Wikidata item ID for a single protein
 	function createOrAmendProteinItem ( $gene_q , $protein ) {
 		$genedb_id = $protein['attributes']['ID'] ;
@@ -538,79 +628,7 @@ class GFF2WD {
 		if ( $gene_q != 'LAST' ) $protein_i->addClaim ( $protein_i->newClaim('P702',$protein_i->newItem($gene_q) , [$refs] ) ) ; # Encoded by:gene
 		$protein_i->addClaim ( $protein_i->newClaim('P3382',$protein_i->newString($genedb_id) , [$refs] ) ) ; # GeneDB ID
 
-		$xref2prop = [
-#			'MPMP' => '???' ,
-			'UniProtKB' => 'P352'
-		] ;
-
-		if ( isset($protein['attributes']) and isset($protein['attributes']['Dbxref']) ) {
-			foreach ( $protein['attributes']['Dbxref'] AS $xref ) {
-				$xref = explode ( ':' , $xref , 2 ) ;
-				$key = trim($xref[0]) ;
-				$value = trim($xref[1]) ;
-				if ( !isset($xref2prop[$key]) ) continue ;
-				$prop = $xref2prop[$key] ;
-				$protein_i->addClaim ( $protein_i->newClaim($prop,$protein_i->newString($value) , [$refs] ) ) ;
-			}
-		}
-
-		if ( isset($protein['attributes']) and isset($protein['attributes']['product']) and is_array($protein['attributes']['product']) ) {
-			$ap = $protein['attributes']['product'] ;
-			$apk = [] ;
-			foreach ( $ap AS $v ) {
-				if ( preg_match ( '/^(.+?)=(.+)$/' , $v , $m ) ) $apk[$m[1]] = $m[2] ;
-				if ( preg_match ( '/^term=(.+)$/' , $v , $m ) ) {
-					if ( $label == $genedb_id ) {
-						$label = $m[1] ;
-						$protein_i->addAlias ( 'en' , $genedb_id ) ;
-					} else {
-						$protein_i->addAlias ( 'en' , $m[1] ) ;
-					}
-				} else if ( preg_match ( '/^with=InterPro:(.+)$/' , $v , $m ) ) {
-#					$protein_i->addClaim ( $protein_i->newClaim('P2926',$protein_i->newString($m[1]) , [$refs] ) ) ; # Deactivated; applies to family?
-				}
-			}
-
-			
-			if ( isset($apk['evidence']) ) {
-				$refs2 = [
-					$protein_i->newSnak ( 'P1640' , $protein_i->newItem('Q5531047') ) ,
-					$protein_i->newSnak ( 'P813' , $protein_i->today() )
-				] ;
-				$qualifiers = [] ;
-
-				if ( isset($apk['evidence']) ) {
-					$ecq = $this->evidence_codes_labels[$this->normalizeEvidenceLabel($apk['evidence'])] ;
-					if ( isset($ecq) ) {
-						$qualifiers[] = $protein_i->newSnak ( 'P459' , $protein_i->newItem($ecq) ) ;
-					}
-				}
-				if ( isset($apk['term']) ) {
-					$qualifiers[] = $protein_i->newSnak ( 'P1810' , $protein_i->newString($apk['term']) ) ;
-				}
-				if ( isset($apk['with']) ) {
-					$with_from_parts = explode ( '|' , $apk['with'] ) ;
-					foreach ( $with_from_parts AS $part ) {
-						$qualifier = $this->getWithFromQualifier ( $part , $protein_i ) ;
-						if ( isset($qualifier) ) $qualifiers[] = $qualifier ;
-					}
-				}
-
-				$lit_q = '' ;
-				if ( isset($apk['db_xref']) and preg_match ( '/^PMID:/',$apk['db_xref']) ) {
-					$lit_id = $apk['db_xref'] ;
-					$literature[$lit_id] = 1 ;
-					$lit_q = $this->getOrCreatePaperFromID ( $lit_id ) ;
-				}
-
-				if ( isset($lit_q) and $lit_q != '' ) {
-					$protein_i->addClaim ( $protein_i->newClaim('P1343',$protein_i->newItem($lit_q) , [$refs2] , $qualifiers ) ) ; # Described by source
-				} else {
-					$protein_i->addClaim ( $protein_i->newSomevalue('P1343', [$refs2] , $qualifiers ) ) ; # Described by source:somevalue
-				}
-
-			}
-		}
+		$this->processProduct ( $protein , $protein_i , $literature , $genedb_id , $refs ) ;
 
 		if ( isset($this->go_annotation[$genedb_id]) ) {
 			$new_go_claims = [] ;
@@ -774,6 +792,8 @@ class GFF2WD {
 	function getWithFromQualifier ( $with_from , &$protein_i ) {
 		if ( preg_match ( '/^Pfam:(.+)$/' , $with_from , $m ) ) {
 			return $protein_i->newSnak ( 'P3519' , $protein_i->newString($m[1]) ) ;
+		} else if ( preg_match ( '/^Rfam:(.+)$/' , $with_from , $m ) ) {
+			return $protein_i->newSnak ( 'P3523' , $protein_i->newString($m[1]) ) ;
 		} else if ( preg_match ( '/^GeneDB:(.+)$/' , $with_from , $m ) ) {
 			return $protein_i->newSnak ( 'P3382' , $protein_i->newString($m[1]) ) ;
 		} else if ( preg_match ( '/^UniProt:(.+)$/' , $with_from , $m ) ) {
