@@ -13,6 +13,7 @@ if ( !isset($argv[1]) ) die ( "Species key required\n" ) ;
 $sk = $argv[1] ;
 
 $gff2wd = new GFF2WD ;
+$gff2wd->qs->sleep = 1 ; # Seconds
 $config = json_decode (file_get_contents ( $config_path ) ) ;
 $found = false ;
 foreach ( $config AS $group => $entries ) {
