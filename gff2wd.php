@@ -18,6 +18,7 @@ class GFF2WD {
 	var $protein_genedb2q = [] ;
 	var $orth_genedb2q = [] ;
 	var $orth_genedb2q_taxon = [] ;
+	public $sleep_after_action ;
 	public $qs ;
 	var $go_term_cache ;
 	var $aspects = [ 'P' => 'P682' , 'F' => 'P680' , 'C' => 'P681' ] ;
@@ -455,6 +456,7 @@ class GFF2WD {
 				print "Failed trying to edit gene '{$genedb_id}': '{$oa->error}' / ".json_encode($qs->last_res)."\n" ;
 				return ;
 			}
+			if ( isset($this->sleep_after_action) ) sleep($this->sleep_after_action);
 			if ( $gene_q == 'LAST' ) {
 				$new_gene_q = $qs->last_res->entity->id ;
 				$this->genedb2q[$genedb_id] = $new_gene_q ;
@@ -763,6 +765,8 @@ class GFF2WD {
 				print "Failed trying to edit protein '{$label}': '{$oa->error}' / ".json_encode($qs->last_res)."\n" ;
 				return ;
 			}
+			if ( isset($this->sleep_after_action) ) sleep($this->sleep_after_action);
+
 			if ( $protein_q == 'LAST' ) {
 				$protein_q = $qs->last_res->entity->id ;
 				$this->protein_genedb2q[$genedb_id] = $protein_q ;

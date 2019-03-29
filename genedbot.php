@@ -14,6 +14,7 @@ $sk = $argv[1] ;
 
 $gff2wd = new GFF2WD ;
 $gff2wd->qs->sleep = 1 ; # Seconds
+$gff2wd->sleep_after_action = 5 ; # Seconds
 $config = json_decode (file_get_contents ( $config_path ) ) ;
 $found = false ;
 foreach ( $config AS $group => $entries ) {
