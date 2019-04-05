@@ -28,7 +28,7 @@ class GFF2WD {
 	var $sparql_result_cache = [] ;
 	var $paper_editor ;
 	var $other_types = [] ;
-	var $alternate_gene_subclasses = [
+	public $alternate_gene_subclasses = [
 		'tRNA' => 'Q201448' ,
 		'rRNA' => 'Q215980' ,
 		'pseudogene' => 'Q277338' ,

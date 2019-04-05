@@ -6,6 +6,9 @@ $cronfile = '/data/project/genedb/cron.tab' ;
 
 require_once ( "gff2wd.php" ) ;
 
+# DAYE 0 = SUNDAY
+$pause_between_starts_h = 6 ;
+
 $crontab = [] ;
 $crontab[] = '10 2 * * * jsub -mem 2g -once -quiet /data/project/genedb/scripts/notify_on_changes.php' ;
 $crontab[] = '#----' ;
@@ -17,7 +20,7 @@ $config = json_decode (file_get_contents ( $config_path ) ) ;
 foreach ( $config AS $group => $entries ) {
 	foreach ( $entries AS $entry ) {
 		if ( !isset($entry->wikidata_id) ) continue ;
-		$hour += 2 ;
+		$hour += $pause_between_starts_h ;
 		if ( $hour > 23 ) {
 			$day++ ;
 			if ( $day > 6 ) $day = 0 ;
