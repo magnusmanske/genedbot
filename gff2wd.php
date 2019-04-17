@@ -129,7 +129,7 @@ class GFF2WD {
 			return $gaf_filename ;
 		} else { # DEFAULT: FTP
 			$root = $this->gffj->file_root ;
-			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/{$root}/{$root}.gaf" ; # .gz
+			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/{$root}/{$root}.gaf.gz" ;
 #			return "ftp://ftp.sanger.ac.uk/pub/genedb/releases/latest/" . $this->gffj->file_root.'/'.$this->gffj->file_root.'.gaf.gz' ;
 		}
 	}
