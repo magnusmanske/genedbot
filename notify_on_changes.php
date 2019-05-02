@@ -35,7 +35,7 @@ $tfc = new ToolforgeCommon('notify on changes');
 
 $db = $tfc->openDBwiki ( 'wikidatawiki' ) ;
 $sql = "SELECT page_title,comment_text,revision_userindex.*" ;
-$sql .= ",(SELECT term_text FROM wb_terms WHERE term_full_entity_id=page_title AND term_entity_type='item' AND term_language='en' AND term_type='label') AS label" ;
+#$sql .= ",(SELECT term_text FROM wb_terms WHERE term_full_entity_id=page_title AND term_entity_type='item' AND term_language='en' AND term_type='label') AS label" ;
 $sql .= " FROM revision_userindex,page,`comment`" ;
 $sql .= " WHERE rev_comment_id=comment_id AND rev_page IN (SELECT pl_from FROM pagelinks WHERE pl_namespace=120 AND pl_from_namespace=0 AND pl_title='P3382') AND page_id=rev_page" ;
 $sql .= " AND rev_timestamp>='{$config->last_ts}' " ;
@@ -44,8 +44,18 @@ $sql .= " AND rev_user_text NOT IN ('" . implode("','",$config->user_whitelist) 
 
 $message = '' ;
 $result = $tfc->getSQL ( $db , $sql ) ;
+$tmp = [] ;
 while($o = $result->fetch_object()){
-	$t = "Item <a href='https://www.wikidata.org/wiki/{$o->page_title}'>{$o->page_title}</a> <i>{$o->label}</i><br/>\n" ;
+	$tmp[] = $o ;
+	$qs[] = $o->page_title ;
+}
+$wil = new WikidataItemList ;
+$q2label = $wil->getItemLabels($qs) ;
+
+foreach ( $tmp AS $o ) {
+	$label = $o->page_title ;
+	if ( isset($q2label[$o->page_title])) $label = $q2label[$o->page_title] ;
+	$t = "Item <a href='https://www.wikidata.org/wiki/{$o->page_title}'>{$o->page_title}</a> <i>{$label}</i><br/>\n" ;
 	$t .= "changed on {$o->rev_timestamp} by <a href='https://www.wikidata.org/wiki/User:".urlencode($o->rev_user_text)."'>{$o->rev_user_text}</a>:\n" ;
 	$t .= "<pre>{$o->comment_text}</pre>\n" ;
 	$t .= "<a href='https://www.wikidata.org/w/index.php?title={$o->page_title}&type=revision&diff={$o->rev_id}&oldid={$o->rev_parent_id}'>See changes</a>" ;

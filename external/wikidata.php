@@ -354,7 +354,43 @@ class WikidataItemList {
     	$this->sanitizeQ($q) ;
     	return isset($this->items[$q]) ;
     }
-	
+
+    public function getItemLabels ( $list , $language = 'en' ) {
+    	global $wikidata_api_url ;
+    	$ret = [] ;
+    	$list = array_unique($list);
+
+    	$qs = [ [] ] ;
+    	foreach ( $list AS $q ) {
+    		$this->sanitizeQ($q) ;
+    		if ( !preg_match ( '/^[A-Z]\d+/' , $q ) ) continue ; # Paranoia
+	    	if ( isset($this->items[$q]) ) { # Have the entire item already
+	    		$ret[$q] = $this->items[$q]->getLabel($language,true) ;
+	    		continue ;
+	    	}
+	    	if ( count($qs[count($qs)-1]) == 50 ) $qs[] = [] ;
+    		$qs[count($qs)-1][] = $q ;
+    	}
+    	if ( count($qs) == 1 and count($qs[0]) == 0 ) return $ret ;
+
+    	$urls = [] ;
+    	foreach ( $qs AS $k => $sublist ) {
+    		if ( count ( $sublist ) == 0 ) continue ;
+			$url = "{$wikidata_api_url}?action=wbformatentities&ids=" . implode('|',$sublist) . "&uselang={$language}&format=json" ;
+			$urls[$k] = $url ;
+    	}
+    	$res = $this->getMultipleURLsInParallel ( $urls ) ;
+    	
+		foreach ( $res AS $k => $txt ) {
+			$j = json_decode ( $txt ) ;
+			if ( !isset($j) or !isset($j->wbformatentities) ) continue ;
+			foreach ( $j->wbformatentities AS $k => $v ) {
+				$ret[$k] = strip_tags($v) ;
+			}
+		}
+		return $ret ;
+    }
+		
 	public function loadItemByPage ( $page , $wiki ) {
 		global $wikidata_api_url ;
 		$page = urlencode ( ucfirst ( str_replace ( ' ' , '_' , trim($page) ) ) ) ;
